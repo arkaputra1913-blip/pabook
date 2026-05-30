@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Reservasi{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Reservasi Parkir</h1>
+<p class="page-subtitle">Pilih slot tersedia (hijau), isi data, lanjutkan pembayaran</p>
+
+<div class="row g-4">
+  <!-- Slot Grid -->
+  <div class="col-lg-7">
+    <div class="card p-4">
+      <div class="slot-grid-container">
+        <div class="parking-layout">
+          <!-- Zone ABC (kiri) -->
+          <div class="main-zones">
+            {% for zone in ['A','B','C'] %}
+            <div class="zone-row mb-3">
+              <div class="zone-label">Zone {{ zone }}</div>
+              <div class="slots-row">
+                {% for slot in slots if slot.zone == zone %}
+                <button
+                  class="slot-btn {{ slot.status }}"
+                  data-slot="{{ slot.slot_code }}"
+                  {% if slot.status != 'available' %}disabled{% endif %}
+                  onclick="selectSlot('{{ slot.slot_code }}')"
+                  title="Slot {{ slot.slot_code }} – {{ slot.status }}">
+                  {{ slot.slot_code }}
+                </button>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <!-- Aisle -->
+          <div class="parking-aisle">
+            <div class="aisle-line"></div>
+            <div class="aisle-label">Jalan</div>
+            <div class="aisle-line"></div>
+          </div>
+
+          <!-- Zone D (kanan, vertikal) -->
+          <div class="zone-d-column">
+            <div class="zone-label">Zone D</div>
+            <div class="slots-col">
+              {% for slot in slots if slot.zone == 'D' %}
+              <button
+                class="slot-btn {{ slot.status }}"
+                data-slot="{{ slot.slot_code }}"
+                {% if slot.status != 'available' %}disabled{% endif %}
+                onclick="selectSlot('{{ slot.slot_code }}')"
+                title="Slot {{ slot.slot_code }} – {{ slot.status }}">
+                {{ slot.slot_code }}
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <div class="slot-legend mt-4">
+          <div class="legend-item"><div class="legend-dot available"></div><span>Tersedia</span></div>
+          <div class="legend-item"><div class="legend-dot occupied"></div><span>Terisi</span></div>
+          <div class="legend-item"><div class="legend-dot reserved"></div><span>Dipesan</span></div>
+        </div>
+      </div>
+      <p class="text-center mt-3" style="font-size:12px; color:var(--text-muted);">
+        <i class="fas fa-sync-alt me-1"></i>Status diperbarui otomatis setiap 10 detik
+      </p>
+    </div>
+  </div>
+
+  <!-- Booking Panel -->
+  <div class="col-lg-5">
+    <div class="booking-panel">
+      <div class="selected-slot-display">
+        <div class="selected-slot-code" id="slotCode">– –</div>
+        <div class="selected-slot-label">Slot Terpilih</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label"><i class="fas fa-car me-1"></i>Kendaraan</label>
+        <input type="text" class="form-control" id="vehicle"
+               placeholder="Misal: Toyota Avanza Hitam" oninput="checkReady()">
+      </div>
+      <div class="mb-4">
+        <label class="form-label"><i class="fas fa-phone me-1"></i>Kontak (WA/HP)</label>
+        <input type="text" class="form-control" id="contact"
+               placeholder="+62xxxxxxxxxx" oninput="checkReady()">
+      </div>
+
+      <button type="button" class="btn-primary-custom" id="btnLanjutkan"
+              onclick="showPayment()" disabled>
+        <i class="fas fa-arrow-right"></i>
+        Lanjutkan Reservasi
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Payment Modal ── -->
+<div class="modal fade payment-modal" id="paymentModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title"><i class="fas fa-credit-card me-2"></i>Jenis Pembayaran</h5>
+          <div style="font-size:12px; opacity:.75; margin-top:3px;">
+            Slot: <strong id="paySlot">–</strong> &nbsp;|&nbsp; Harga: <strong>Rp 5.000</strong>
+          </div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <p class="section-micro-label">Transfer Bank</p>
+            <label class="payment-option" onclick="selectPay(this,'Bank BCA')">
+              <input type="radio" name="pay" value="Bank BCA">
+              <div><div class="pay-name">Bank BCA</div><div class="pay-sub">1234 5678 9012</div></div>
+            </label>
+            <label class="payment-option" onclick="selectPay(this,'Bank Mandiri')">
+              <input type="radio" name="pay" value="Bank Mandiri">
+              <div><div class="pay-name">Bank Mandiri</div><div class="pay-sub">0987 6543 2100</div></div>
+            </label>
+            <label class="payment-option" onclick="selectPay(this,'E-Wallet')">
+              <input type="radio" name="pay" value="E-Wallet">
+              <div><div class="pay-name">E-Wallet</div><div class="pay-sub">GoPay / OVO / Dana</div></div>
+            </label>
+            <div class="mt-3 total-line">
+              Total: <span>Rp 5.000</span>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <p class="section-micro-label">QRIS</p>
+            <div class="qris-box">
+              <div class="qris-title"><i class="fas fa-qrcode me-1"></i>QRIS</div>
+              <div class="qris-placeholder"><i class="fas fa-qrcode"></i></div>
+              <div class="qris-note">Scan via m-banking manapun</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-0 px-4 pb-4 d-flex flex-column gap-2">
+        <button type="button" class="btn btn-light w-100" data-bs-dismiss="modal">Batal</button>
+        <button type="button" class="btn-primary-custom" onclick="konfirmasi()">
+          <i class="fas fa-check-circle"></i> Konfirmasi Pembayaran
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden submit form -->
+<form id="submitForm" action="{{ url_for('proses_reservasi') }}" method="POST" style="display:none">
+  <input type="hidden" name="slot_code"       id="f_slot">
+  <input type="hidden" name="vehicle"         id="f_vehicle">
+  <input type="hidden" name="contact"         id="f_contact">
+  <input type="hidden" name="payment_method"  id="f_pay">
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selSlot = null, selPay = 'QRIS';
+
+function selectSlot(code) {
+  document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
+  const btn = document.querySelector(`[data-slot="${code}"]`);
+  if (btn && !btn.disabled) {
+    btn.classList.add('selected');
+    selSlot = code;
+    document.getElementById('slotCode').textContent = code;
+    document.getElementById('paySlot').textContent  = code;
+  }
+  checkReady();
+}
+
+function checkReady() {
+  const v = document.getElementById('vehicle').value.trim();
+  const c = document.getElementById('contact').value.trim();
+  const b = document.getElementById('btnLanjutkan');
+  const ok = selSlot && v && c;
+  b.disabled = !ok;
+  b.style.opacity = ok ? '1' : '0.55';
+}
+
+function selectPay(el, method) {
+  document.querySelectorAll('.payment-option').forEach(p => p.classList.remove('selected'));
+  el.classList.add('selected');
+  selPay = method;
+}
+
+function showPayment() {
+  if (!selSlot) return alert('Pilih slot parkir dulu!');
+  const v = document.getElementById('vehicle').value.trim();
+  const c = document.getElementById('contact').value.trim();
+  if (!v || !c) return alert('Lengkapi data kendaraan & kontak!');
+  new bootstrap.Modal(document.getElementById('paymentModal')).show();
+}
+
+function konfirmasi() {
+  document.getElementById('f_slot').value    = selSlot;
+  document.getElementById('f_vehicle').value = document.getElementById('vehicle').value;
+  document.getElementById('f_contact').value = document.getElementById('contact').value;
+  document.getElementById('f_pay').value     = selPay;
+  document.getElementById('submitForm').submit();
+}
+
+// Auto-refresh slots setiap 10 detik
+setInterval(() => {
+  fetch('/api/slots').then(r => r.json()).then(slots => {
+    slots.forEach(s => {
+      const btn = document.querySelector(`[data-slot="${s.slot_code}"]`);
+      if (!btn) return;
+      btn.className = `slot-btn ${s.status}`;
+      btn.disabled  = s.status !== 'available';
+      if (s.status !== 'available' && btn.classList.contains('selected')) {
+        selSlot = null;
+        document.getElementById('slotCode').textContent = '– –';
+        btn.classList.remove('selected');
+        checkReady();
+      }
+    });
+  });
+}, 10000);
+</script>
+{% endblock %}

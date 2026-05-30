@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Admin Dashboard</h1>
+<p class="page-subtitle">Monitor &amp; kelola sistem parkir Pabook secara real-time</p>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="stat-card st-total">
+      <div class="sc-label">Total Slot</div>
+      <div class="sc-val count-up">{{ total }}</div>
+      <i class="fas fa-parking sc-icon"></i>
+    </div>
+  </div>
+  <div class="col-6 col-md-3" style="animation-delay:.08s">
+    <div class="stat-card st-avail">
+      <div class="sc-label">Tersedia</div>
+      <div class="sc-val count-up">{{ available }}</div>
+      <i class="fas fa-check-circle sc-icon"></i>
+    </div>
+  </div>
+  <div class="col-6 col-md-3" style="animation-delay:.16s">
+    <div class="stat-card st-occ">
+      <div class="sc-label">Terisi</div>
+      <div class="sc-val count-up">{{ occupied }}</div>
+      <i class="fas fa-car sc-icon"></i>
+    </div>
+  </div>
+  <div class="col-6 col-md-3" style="animation-delay:.24s">
+    <div class="stat-card st-res">
+      <div class="sc-label">Dipesan</div>
+      <div class="sc-val count-up">{{ reserved }}</div>
+      <i class="fas fa-clock sc-icon"></i>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <!-- Peta Slot -->
+  <div class="col-lg-6">
+    <div class="card p-4 h-100">
+      <h5 class="card-section-title mb-4">
+        <i class="fas fa-th me-2"></i>Peta Slot Parkir
+      </h5>
+      <div class="slot-grid-container">
+        <div class="parking-layout">
+          <div class="main-zones">
+            {% for zone in ['A','B','C'] %}
+            <div class="zone-row mb-3">
+              <div class="zone-label">Zone {{ zone }}</div>
+              <div class="slots-row">
+                {% for slot in slots if slot.zone == zone %}
+                <div class="slot-btn {{ slot.status }} no-anim"
+                     title="{{ slot.slot_code }} — {{ slot.status }}">
+                  {{ slot.slot_code }}
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="parking-aisle">
+            <div class="aisle-line"></div>
+            <div class="aisle-label">Jalan</div>
+            <div class="aisle-line"></div>
+          </div>
+          <div class="zone-d-column">
+            <div class="zone-label">Zone D</div>
+            <div class="slots-col">
+              {% for slot in slots if slot.zone == 'D' %}
+              <div class="slot-btn {{ slot.status }} no-anim"
+                   title="{{ slot.slot_code }} — {{ slot.status }}">
+                {{ slot.slot_code }}
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div class="slot-legend mt-3">
+          <div class="legend-item"><div class="legend-dot available"></div><span>Tersedia</span></div>
+          <div class="legend-item"><div class="legend-dot occupied"></div><span>Terisi</span></div>
+          <div class="legend-item"><div class="legend-dot reserved"></div><span>Dipesan</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel kanan -->
+  <div class="col-lg-6 d-flex flex-column gap-4">
+    <!-- Ringkasan -->
+    <div class="card p-4">
+      <h5 class="card-section-title mb-3">
+        <i class="fas fa-chart-bar me-2"></i>Ringkasan Aktivitas
+      </h5>
+      <div class="row g-2">
+        <div class="col-6">
+          <div class="mini-stat-box purple">
+            <div class="ms-val">{{ activities|selectattr('status','equalto','checked_in')|list|length + activities|selectattr('status','equalto','checked_out')|list|length }}</div>
+            <div class="ms-label">Total Masuk</div>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="mini-stat-box green">
+            <div class="ms-val">{{ activities|selectattr('status','equalto','checked_out')|list|length }}</div>
+            <div class="ms-label">Total Keluar</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Reset Slot -->
+    <div class="card p-4 flex-grow-1">
+      <h5 class="card-section-title mb-3">
+        <i class="fas fa-redo me-2"></i>Reset Slot Manual
+      </h5>
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+        Slot dengan status dipesan/terisi yang perlu direset secara manual:
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        {% for slot in slots if slot.status != 'available' %}
+        <form action="{{ url_for('admin_reset_slot', slot_code=slot.slot_code) }}" method="POST">
+          <button type="submit" class="reset-slot-btn"
+                  title="Reset {{ slot.slot_code }} ke tersedia">
+            <i class="fas fa-redo me-1"></i>{{ slot.slot_code }}
+          </button>
+        </form>
+        {% else %}
+        <span style="font-size:13px; color:var(--text-muted);">Semua slot tersedia ✅</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Activity Log -->
+<div class="card">
+  <div class="p-4">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+      <h5 class="card-section-title mb-0">
+        <i class="fas fa-history me-2"></i>Log Aktivitas
+      </h5>
+      <div class="d-flex gap-2 align-items-center flex-wrap">
+        <form method="GET" action="{{ url_for('admin_dashboard') }}" class="d-flex gap-2">
+          <div class="search-wrap">
+            <i class="fas fa-search"></i>
+            <input type="text" class="form-control" name="search"
+                   placeholder="Cari kendaraan, slot…" value="{{ search }}">
+          </div>
+          <button type="submit" class="btn-accent" style="padding:10px 16px; font-size:13px;">Cari</button>
+        </form>
+        <a href="{{ url_for('admin_export_csv') }}" class="btn-success-custom"
+           style="padding:10px 16px; font-size:13px; text-decoration:none;
+                  display:inline-flex; align-items:center; gap:6px; border-radius:var(--radius-sm);">
+          <i class="fas fa-file-csv"></i> Download Laporan
+        </a>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table class="act-table">
+        <thead>
+          <tr>
+            <th>Tanggal</th><th>Kode</th><th>Kendaraan</th>
+            <th>Kontak</th><th>Slot</th><th>Masuk</th><th>Keluar</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in activities %}
+          <tr>
+            <td class="text-muted-sm">{{ a.created_at.strftime('%d/%m/%Y') }}</td>
+            <td><code class="res-code">{{ a.reservation_code[-10:] }}</code></td>
+            <td class="fw-semibold">{{ a.vehicle }}</td>
+            <td class="text-muted-sm">{{ a.contact }}</td>
+            <td><span class="slot-pill">{{ a.slot_code }}</span></td>
+            <td>
+              {% if a.checked_in_at %}
+                <span style="color:var(--success); font-weight:600;">{{ a.checked_in_at.strftime('%H:%M') }}</span>
+              {% else %}<span class="text-muted-sm">—</span>{% endif %}
+            </td>
+            <td>
+              {% if a.checked_out_at %}
+                <span style="color:var(--danger); font-weight:600;">{{ a.checked_out_at.strftime('%H:%M') }}</span>
+              {% else %}<span class="text-muted-sm">—</span>{% endif %}
+            </td>
+            <td>
+              {% if a.status == 'active' %}
+                <span class="badge-status st-active" style="font-size:10px;">Aktif</span>
+              {% elif a.status == 'checked_in' %}
+                <span class="badge-status st-in" style="font-size:10px;">Masuk</span>
+              {% elif a.status == 'checked_out' %}
+                <span class="badge-status st-out" style="font-size:10px;">Keluar</span>
+              {% else %}
+                <span class="badge-status" style="font-size:10px; background:rgba(107,114,128,.1); color:var(--text-muted);">{{ a.status }}</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8" style="text-align:center; padding:48px; color:var(--text-muted);">
+              <i class="fas fa-inbox" style="font-size:36px; opacity:.2; display:block; margin-bottom:8px;"></i>
+              Tidak ada aktivitas ditemukan
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-refresh dashboard setiap 15 detik
+setTimeout(() => location.reload(), 15000);
+</script>
+{% endblock %}

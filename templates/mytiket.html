@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Mytiketgw{% endblock %}
+
+{% block content %}
+{% if reservation %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <h1 class="page-title text-center">Tiket Parkir Saya</h1>
+    <p class="page-subtitle text-center">Tunjukkan QR ini saat masuk &amp; keluar area parkir</p>
+
+    <div class="ticket-card" id="ticketCard">
+      <!-- Header -->
+      <div class="ticket-header">
+        <div class="d-flex align-items-center justify-content-center gap-3">
+          <div class="ticket-header-icon"><i class="fas fa-parking"></i></div>
+          <div>
+            <h3>Tiket Parkir</h3>
+            <div class="ticket-id">{{ reservation.reservation_code }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div class="ticket-body">
+        <div class="ticket-details">
+          <div class="ticket-row">
+            <div class="td-label"><i class="fas fa-clock me-1"></i>Jam Reservasi</div>
+            <div class="td-value">{{ reservation.created_at.strftime('%H:%M WIB, %d %b %Y') }}</div>
+          </div>
+          <div class="ticket-row">
+            <div class="td-label"><i class="fas fa-map-marker-alt me-1"></i>Slot Terpilih</div>
+            <div class="td-value slot-big">{{ reservation.slot_code }}</div>
+          </div>
+          <div class="ticket-row">
+            <div class="td-label"><i class="fas fa-car me-1"></i>Kendaraan</div>
+            <div class="td-value">{{ reservation.vehicle }}</div>
+          </div>
+          <div class="ticket-row">
+            <div class="td-label"><i class="fas fa-phone me-1"></i>Kontak</div>
+            <div class="td-value">{{ reservation.contact }}</div>
+          </div>
+          <div class="ticket-row">
+            <div class="td-label">Status</div>
+            <div class="td-value">
+              {% if reservation.status == 'active' %}
+                <span class="badge-status st-active"><i class="fas fa-clock me-1"></i>Menunggu Masuk</span>
+              {% elif reservation.status == 'checked_in' %}
+                <span class="badge-status st-in"><i class="fas fa-check-circle me-1"></i>Sudah Masuk</span>
+              {% elif reservation.status == 'checked_out' %}
+                <span class="badge-status st-out"><i class="fas fa-sign-out-alt me-1"></i>Selesai</span>
+              {% endif %}
+            </div>
+          </div>
+          {% if reservation.checked_in_at %}
+          <div class="ticket-row">
+            <div class="td-label">Waktu Masuk</div>
+            <div class="td-value">{{ reservation.checked_in_at.strftime('%H:%M WIB') }}</div>
+          </div>
+          {% endif %}
+          {% if reservation.checked_out_at %}
+          <div class="ticket-row">
+            <div class="td-label">Waktu Keluar</div>
+            <div class="td-value">{{ reservation.checked_out_at.strftime('%H:%M WIB') }}</div>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="ticket-qr">
+          <img src="data:image/png;base64,{{ qr_image }}" alt="QR Code Tiket">
+          <div class="qr-label">Scan di Gate</div>
+        </div>
+      </div>
+
+      <!-- Perforated divider -->
+      <div class="ticket-perf">
+        <div class="perf-circle left"></div>
+        <div class="perf-line"></div>
+        <div class="perf-circle right"></div>
+      </div>
+
+      <!-- Footer -->
+      <div class="ticket-footer">
+        {% if reservation.status in ['active', 'reserved'] %}
+        <div class="ticket-expiry">
+          <i class="fas fa-exclamation-triangle"></i>
+          EXP: QR aktif — nonaktif otomatis setelah scan keluar
+        </div>
+        {% elif reservation.status == 'checked_out' %}
+        <div class="ticket-done">
+          <i class="fas fa-check-circle"></i> Tiket sudah digunakan
+        </div>
+        {% endif %}
+
+        <div class="d-flex gap-2 mt-3 flex-wrap">
+          <button class="btn-accent flex-grow-1" onclick="downloadTicket()">
+            <i class="fas fa-download me-2"></i>Unduh Tiket
+          </button>
+          <a href="{{ url_for('reservasi') }}"
+             class="btn-outline-custom flex-grow-1 text-center text-decoration-none">
+            <i class="fas fa-plus me-1"></i>Reservasi Baru
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Token info box (untuk testing gate) -->
+    <div class="token-info-box mt-3">
+      <i class="fas fa-info-circle me-1"></i>
+      <strong>Token QR (uji coba gate):</strong>
+      <code class="ms-1">{{ reservation.qr_token }}</code>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="empty-state">
+  <div class="empty-icon">🎫</div>
+  <h2 class="empty-title">Belum Ada Tiket Aktif</h2>
+  <p class="empty-desc">Kamu belum booking slot parkir. Yuk reservasi sekarang!</p>
+  <a href="{{ url_for('reservasi') }}" class="hero-cta">
+    <i class="fas fa-parking"></i> Reservasi Sekarang
+  </a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+async function downloadTicket() {
+  const card = document.getElementById('ticketCard');
+  const btn  = event.currentTarget;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Mengunduh...';
+  btn.disabled  = true;
+  try {
+    const canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    const a = document.createElement('a');
+    a.download = 'tiket-pabook-{{ reservation.reservation_code if reservation else "ticket" }}.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  } catch {
+    alert('Gagal mengunduh. Coba screenshot manual.');
+  }
+  btn.innerHTML = '<i class="fas fa-download me-2"></i>Unduh Tiket';
+  btn.disabled  = false;
+}
+</script>
+{% endblock %}

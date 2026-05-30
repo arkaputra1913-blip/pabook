@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Gate Scanner{% endblock %}
+
+{% block content %}
+<div class="gate-container">
+  <h1 class="page-title text-center">Gate Scanner</h1>
+  <p class="page-subtitle text-center">Simulasi pemindaian QR Code di gerbang parkir</p>
+
+  <div class="gate-card mb-4">
+    <!-- Pilih tipe gate -->
+    <div class="gate-selector">
+      <button class="gate-type-btn active-entry" id="btnEntry" onclick="setGate('entry')">
+        <i class="fas fa-sign-in-alt"></i> Gate Masuk
+      </button>
+      <button class="gate-type-btn" id="btnExit" onclick="setGate('exit')">
+        <i class="fas fa-sign-out-alt"></i> Gate Keluar
+      </button>
+    </div>
+
+    <!-- Icon gate -->
+    <div class="gate-icon-box gate-entry-bg" id="gateIconBox">
+      <i class="fas fa-sign-in-alt" id="gateIconEl"></i>
+    </div>
+    <div class="gate-status-label" id="gateStatusLabel">GATE MASUK — SIAP</div>
+
+    <!-- Input token -->
+    <div class="mt-4 text-start">
+      <label class="form-label"><i class="fas fa-qrcode me-1"></i>Token QR Code</label>
+      <textarea class="form-control" id="qrToken" rows="3"
+                placeholder="Paste token dari halaman Mytiketgw..."
+                style="font-family:monospace; font-size:12px; resize:none;"></textarea>
+      <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">
+        💡 Token tersedia di bawah tiket pada halaman <strong>Mytiketgw</strong>. Tekan Enter untuk scan.
+      </div>
+    </div>
+
+    <button class="btn-primary-custom mt-3" id="scanBtn" onclick="scanQR()">
+      <i class="fas fa-qrcode"></i> Scan &amp; Validasi
+    </button>
+
+    <div class="scan-result" id="scanResult"></div>
+  </div>
+
+  <!-- Riwayat -->
+  <div class="card p-4">
+    <h6 style="font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+               color:var(--text-secondary); margin-bottom:16px;">
+      <i class="fas fa-history me-1"></i>Riwayat Scan
+    </h6>
+    <div id="scanHistory">
+      <div style="font-size:13px; color:var(--text-muted); text-align:center; padding:20px 0;">
+        Belum ada riwayat scan sesi ini
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let gateType = 'entry';
+let history  = [];
+
+function setGate(type) {
+  gateType = type;
+  const btnE = document.getElementById('btnEntry');
+  const btnX = document.getElementById('btnExit');
+  const box  = document.getElementById('gateIconBox');
+  const icon = document.getElementById('gateIconEl');
+  const lbl  = document.getElementById('gateStatusLabel');
+
+  if (type === 'entry') {
+    btnE.className = 'gate-type-btn active-entry';
+    btnX.className = 'gate-type-btn';
+    box.className  = 'gate-icon-box gate-entry-bg';
+    icon.className = 'fas fa-sign-in-alt';
+    lbl.textContent = 'GATE MASUK — SIAP';
+  } else {
+    btnE.className = 'gate-type-btn';
+    btnX.className = 'gate-type-btn active-exit';
+    box.className  = 'gate-icon-box gate-exit-bg';
+    icon.className = 'fas fa-sign-out-alt';
+    lbl.textContent = 'GATE KELUAR — SIAP';
+  }
+}
+
+async function scanQR() {
+  const token = document.getElementById('qrToken').value.trim();
+  if (!token) { showResult('⚠️ Masukkan token QR terlebih dahulu!', false); return; }
+
+  const btn = document.getElementById('scanBtn');
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memvalidasi...';
+  btn.disabled  = true;
+
+  const fd = new FormData();
+  fd.append('qr_token', token);
+  fd.append('gate_type', gateType);
+
+  try {
+    const res  = await fetch('/gate/scan', { method:'POST', body: fd });
+    const data = await res.json();
+    showResult(data.message, data.success);
+    if (data.success) {
+      document.getElementById('qrToken').value = '';
+      addHistory(data, gateType);
+    }
+  } catch {
+    showResult('❌ Gagal terhubung ke server!', false);
+  }
+
+  btn.innerHTML = '<i class="fas fa-qrcode"></i> Scan &amp; Validasi';
+  btn.disabled  = false;
+}
+
+function showResult(msg, ok) {
+  const el = document.getElementById('scanResult');
+  el.style.display = 'block';
+  el.className = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
+  el.innerHTML = msg;
+  setTimeout(() => el.style.display = 'none', 5000);
+}
+
+function addHistory(data, type) {
+  history.unshift({ type, slot: data.slot, vehicle: data.vehicle||'—',
+                    time: new Date().toLocaleTimeString('id-ID'), duration: data.duration||null });
+  const el = document.getElementById('scanHistory');
+  el.innerHTML = history.slice(0,10).map(h => `
+    <div class="history-item ${h.type === 'entry' ? 'hi-in' : 'hi-out'}">
+      <div class="hi-dot ${h.type === 'entry' ? 'dot-in' : 'dot-out'}">
+        <i class="fas fa-sign-${h.type === 'entry' ? 'in' : 'out'}-alt"></i>
+      </div>
+      <div>
+        <div style="font-weight:700; font-size:13px;">Slot ${h.slot}${h.vehicle!=='—'?' — '+h.vehicle:''}</div>
+        <div style="font-size:11px; color:var(--text-muted);">
+          ${h.type==='entry'?'Masuk':'Keluar'} • ${h.time}${h.duration?' • Durasi: '+h.duration:''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+document.getElementById('qrToken').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); scanQR(); }
+});
+</script>
+{% endblock %}
