@@ -89,27 +89,31 @@
 {% block scripts %}
 <script>
 let scanHistory = [];
-let scanBuffer  = '';
-let scanTimer   = null;
+
+// ID gate harus sama persis dengan yang ada di ESP32
+const GATE_IDS = {
+  masuk:  'GATE-MASUK-A',
+  keluar: 'GATE-KELUAR-A'
+};
 
 // ── Kontrol Servo Manual ──────────────────────────────────────────
 async function bukaGate(gate) {
-  const btnId     = gate === 'masuk' ? 'btnMasuk' : 'btnKeluar';
-  const statusId  = gate === 'masuk' ? 'statusMasuk' : 'statusKeluar';
-  const btn       = document.getElementById(btnId);
-  const statusEl  = document.getElementById(statusId);
-  const resultEl  = document.getElementById('ctrlResult');
+  const btnId    = gate === 'masuk' ? 'btnMasuk' : 'btnKeluar';
+  const statusId = gate === 'masuk' ? 'statusMasuk' : 'statusKeluar';
+  const btn      = document.getElementById(btnId);
+  const statusEl = document.getElementById(statusId);
 
-  btn.disabled    = true;
-  btn.innerHTML   = '<i class="fas fa-spinner fa-spin me-2"></i>Mengirim...';
+  btn.disabled         = true;
+  btn.innerHTML        = '<i class="fas fa-spinner fa-spin me-2"></i>Mengirim...';
   statusEl.textContent = 'Mengirim...';
   statusEl.className   = 'gate-ctrl-status sending';
 
   try {
     const res  = await fetch('/api/gate/open', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gate_id: 'ESP32-GATE', gate })
+      // FIX: pakai gate_id sesuai ID di ESP32, bukan 'ESP32-GATE'
+      body: JSON.stringify({ gate_id: GATE_IDS[gate], gate })
     });
     const data = await res.json();
 
@@ -117,8 +121,13 @@ async function bukaGate(gate) {
       statusEl.textContent = 'Terbuka';
       statusEl.className   = 'gate-ctrl-status open';
       showCtrlResult(`Palang <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> berhasil dibuka`, true);
-      addHistory({ type: gate === 'masuk' ? 'entry' : 'exit', slot: 'MANUAL', vehicle: 'Override Admin',
-                   time: new Date().toLocaleTimeString('id-ID') });
+      addHistory({
+        type:    gate === 'masuk' ? 'entry' : 'exit',
+        slot:    'MANUAL',
+        vehicle: 'Override Admin',
+        time:    new Date().toLocaleTimeString('id-ID')
+      });
+      // Reset status setelah GATE_OPEN_MS (8 detik) + sedikit buffer
       setTimeout(() => {
         statusEl.textContent = 'Siap';
         statusEl.className   = 'gate-ctrl-status';
@@ -127,26 +136,24 @@ async function bukaGate(gate) {
       statusEl.textContent = 'Gagal';
       statusEl.className   = 'gate-ctrl-status error';
       showCtrlResult('Gagal mengirim perintah ke server', false);
-      setTimeout(() => { statusEl.textContent='Siap'; statusEl.className='gate-ctrl-status'; }, 3000);
+      setTimeout(() => { statusEl.textContent = 'Siap'; statusEl.className = 'gate-ctrl-status'; }, 3000);
     }
   } catch {
     statusEl.textContent = 'Error';
     statusEl.className   = 'gate-ctrl-status error';
     showCtrlResult('Tidak bisa terhubung ke server', false);
-    setTimeout(() => { statusEl.textContent='Siap'; statusEl.className='gate-ctrl-status'; }, 3000);
+    setTimeout(() => { statusEl.textContent = 'Siap'; statusEl.className = 'gate-ctrl-status'; }, 3000);
   }
 
   btn.disabled  = false;
-  btn.innerHTML = gate === 'masuk'
-    ? '<i class="fas fa-lock-open me-2"></i>Buka Palang'
-    : '<i class="fas fa-lock-open me-2"></i>Buka Palang';
+  btn.innerHTML = '<i class="fas fa-lock-open me-2"></i>Buka Palang';
 }
 
 function showCtrlResult(msg, ok) {
   const el = document.getElementById('ctrlResult');
   el.style.display = 'block';
-  el.className = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
-  el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
+  el.className     = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
+  el.innerHTML     = (ok ? '✅ ' : '❌ ') + msg;
   setTimeout(() => el.style.display = 'none', 5000);
 }
 
@@ -157,7 +164,7 @@ const indicator    = document.getElementById('scannerIndicator');
 // Auto-fokus saat halaman dimuat
 scannerInput.focus();
 
-// Refokus jika user klik area lain
+// Refokus jika user klik area lain (bukan tombol/link)
 document.addEventListener('click', e => {
   if (!e.target.closest('button') && !e.target.closest('a')) {
     scannerInput.focus();
@@ -168,26 +175,25 @@ function handleScannerKey(e) {
   if (e.key === 'Enter') {
     e.preventDefault();
     const token = scannerInput.value.trim();
-    if (token.length > 10) {
-      processToken(token);
-    }
+    if (token.length > 10) processToken(token);
     scannerInput.value = '';
   }
 }
 
-// Deteksi otomatis entry vs exit berdasarkan status reservasi
+// Deteksi otomatis entry vs exit berdasarkan status reservasi di server
 async function processToken(token) {
   indicator.innerHTML = '<i class="fas fa-circle blink" style="color:#F59E0B;"></i> Memvalidasi...';
 
-  // Coba entry dulu; jika sudah masuk, otomatis exit
-  const result = await scanGate(token, 'entry');
-  if (!result.success && result.message && result.message.includes('sudah tercatat masuk')) {
+  // Coba entry dulu; jika sudah masuk (checked_in), otomatis alihkan ke exit
+  const entryResult = await scanGate(token, 'entry');
+
+  if (!entryResult.success && entryResult.message && entryResult.message.includes('sudah tercatat masuk')) {
     const exitResult = await scanGate(token, 'exit');
     showScanResult(exitResult.message, exitResult.success);
     if (exitResult.success) addHistory({ type: 'exit', ...exitResult });
   } else {
-    showScanResult(result.message, result.success);
-    if (result.success) addHistory({ type: 'entry', ...result });
+    showScanResult(entryResult.message, entryResult.success);
+    if (entryResult.success) addHistory({ type: 'entry', ...entryResult });
   }
 
   indicator.innerHTML = '<i class="fas fa-circle" style="color:#10B981;"></i> Siap scan berikutnya';
@@ -202,7 +208,7 @@ async function scanGate(token, gateType) {
     fd.append('qr_token',  token);
     fd.append('gate_type', gateType);
     fd.append('gate_id',   'WEB-SCANNER');
-    const res  = await fetch('/gate/scan', { method: 'POST', body: fd });
+    const res = await fetch('/gate/scan', { method: 'POST', body: fd });
     return await res.json();
   } catch {
     return { success: false, message: 'Gagal terhubung ke server!' };
@@ -212,18 +218,18 @@ async function scanGate(token, gateType) {
 function showScanResult(msg, ok) {
   const el = document.getElementById('scanResult');
   el.style.display = 'block';
-  el.className = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
-  el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
+  el.className     = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
+  el.innerHTML     = (ok ? '✅ ' : '❌ ') + msg;
   setTimeout(() => el.style.display = 'none', 6000);
 }
 
+// ── Riwayat Aktivitas ─────────────────────────────────────────────
 function addHistory(data) {
-  const isEntry = data.type === 'entry';
   scanHistory.unshift({
     type:     data.type,
-    slot:     data.slot    || 'MANUAL',
-    vehicle:  data.vehicle || 'Override Admin',
-    time:     data.time    || new Date().toLocaleTimeString('id-ID'),
+    slot:     data.slot     || 'MANUAL',
+    vehicle:  data.vehicle  || 'Override Admin',
+    time:     data.time     || new Date().toLocaleTimeString('id-ID'),
     duration: data.duration || null
   });
 
@@ -238,7 +244,9 @@ function addHistory(data) {
         <div>
           <div style="font-weight:700; font-size:13px;">
             Slot ${h.slot}${h.vehicle && h.vehicle !== 'Override Admin' ? ' — ' + h.vehicle : ''}
-            ${h.vehicle === 'Override Admin' ? '<span style="font-size:11px;color:var(--warning);margin-left:6px;">MANUAL</span>' : ''}
+            ${h.vehicle === 'Override Admin'
+              ? '<span style="font-size:11px;color:var(--warning);margin-left:6px;">MANUAL</span>'
+              : ''}
           </div>
           <div style="font-size:11px; color:var(--text-muted);">
             ${isIn ? 'Masuk' : 'Keluar'} · ${h.time}${h.duration ? ' · Durasi: ' + h.duration : ''}

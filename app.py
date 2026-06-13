@@ -152,7 +152,12 @@ def mytiket():
 
 @app.route('/gate')
 def gate():
-    return render_template('gate.html', is_admin=True)
+    # Kirim ID gate ke template supaya tombol manual bisa pakai ID yang benar
+    gate_ids = {
+        'entry': 'GATE-MASUK-A',
+        'exit':  'GATE-KELUAR-A'
+    }
+    return render_template('gate.html', is_admin=True, gate_ids=gate_ids)
 
 @app.route('/api/ping')
 def api_ping():
@@ -198,7 +203,6 @@ def gate_scan():
             slot.status = 'occupied'
         db.session.commit()
 
-        # Kirim perintah buka gate ke ESP32 (jika ada yang polling)
         gate_commands[gate_id] = {
             'command': 'open', 'gate': 'masuk',
             'slot': r.slot_code, 'vehicle': r.vehicle,
@@ -253,6 +257,11 @@ def gate_scan():
 
 @app.route('/api/gate/open', methods=['POST'])
 def gate_open_manual():
+    """
+    Body JSON:
+      { "gate_id": "GATE-MASUK-A", "gate": "masuk" }
+      { "gate_id": "GATE-KELUAR-A", "gate": "keluar" }
+    """
     data    = request.get_json(force=True, silent=True) or {}
     gate_id = data.get('gate_id', 'ESP32-GATE')
     gate    = data.get('gate',    'masuk')
@@ -266,14 +275,50 @@ def gate_open_manual():
     }
     return jsonify({'ok': True, 'gate': gate, 'gate_id': gate_id})
 
-# Endpoint polling untuk ESP32 (long-poll / short-poll)
+# ─────────────────────────────────────────
+#  POLLING ENDPOINT untuk ESP32
+# ─────────────────────────────────────────
+
 @app.route('/api/gate/poll', methods=['GET'])
 def gate_poll():
+    """
+    ESP32 polling tiap ~1.5 detik.
+    Query param: gate_id
+    Response: { has_command: true/false, command, gate, slot, vehicle, time }
+    """
     gate_id = request.args.get('gate_id', 'ESP32-GATE')
     cmd     = gate_commands.pop(gate_id, None)
     if cmd:
         return jsonify({'has_command': True, **cmd})
     return jsonify({'has_command': False})
+
+# ─────────────────────────────────────────
+#  STATUS GATE (opsional, untuk dashboard realtime)
+# ─────────────────────────────────────────
+
+# Simpan status gate yang dilaporkan ESP32
+gate_status = {}
+
+@app.route('/api/gate/status', methods=['POST'])
+def gate_status_update():
+    """
+    ESP32 melaporkan status gate (open/closed) setelah aksi.
+    Body JSON: { "gate_id": "...", "state": "open" | "closed", "type": "entry" | "exit" }
+    """
+    data    = request.get_json(force=True, silent=True) or {}
+    gate_id = data.get('gate_id', '')
+    if gate_id:
+        gate_status[gate_id] = {
+            'state':     data.get('state', 'unknown'),
+            'type':      data.get('type',  'unknown'),
+            'timestamp': now_wib().strftime('%H:%M:%S')
+        }
+    return jsonify({'ok': True})
+
+@app.route('/api/gate/status', methods=['GET'])
+def gate_status_get():
+    """Ambil status semua gate — untuk dashboard web realtime."""
+    return jsonify(gate_status)
 
 # ─────────────────────────────────────────
 #  ADMIN ROUTES
