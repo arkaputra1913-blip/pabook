@@ -2,54 +2,84 @@
 {% block title %}Gate Scanner{% endblock %}
 
 {% block content %}
-<div class="gate-container">
-  <h1 class="page-title text-center">Gate Scanner</h1>
-  <p class="page-subtitle text-center">Simulasi pemindaian QR Code di gerbang parkir</p>
+<div class="gate-container" style="max-width:600px;">
+  <h1 class="page-title text-center">Kontrol Gate</h1>
+  <p class="page-subtitle text-center">Panel kendali palang parkir — masuk &amp; keluar</p>
 
+  <!-- Kontrol Servo -->
   <div class="gate-card mb-4">
-    <!-- Pilih tipe gate -->
-    <div class="gate-selector">
-      <button class="gate-type-btn active-entry" id="btnEntry" onclick="setGate('entry')">
-        <i class="fas fa-sign-in-alt"></i> Gate Masuk
-      </button>
-      <button class="gate-type-btn" id="btnExit" onclick="setGate('exit')">
-        <i class="fas fa-sign-out-alt"></i> Gate Keluar
-      </button>
+    <div class="gate-ctrl-grid">
+
+      <!-- Gate Masuk -->
+      <div class="gate-ctrl-box entry-box">
+        <div class="gate-ctrl-icon entry-icon">
+          <i class="fas fa-sign-in-alt"></i>
+        </div>
+        <div class="gate-ctrl-label">Gate Masuk</div>
+        <div class="gate-ctrl-status" id="statusMasuk">Siap</div>
+        <button class="gate-ctrl-btn entry-btn" id="btnMasuk" onclick="bukaGate('masuk')">
+          <i class="fas fa-lock-open me-2"></i>Buka Palang
+        </button>
+      </div>
+
+      <div class="gate-divider">
+        <div class="gate-div-line"></div>
+        <div class="gate-div-icon"><i class="fas fa-arrows-alt-h"></i></div>
+        <div class="gate-div-line"></div>
+      </div>
+
+      <!-- Gate Keluar -->
+      <div class="gate-ctrl-box exit-box">
+        <div class="gate-ctrl-icon exit-icon">
+          <i class="fas fa-sign-out-alt"></i>
+        </div>
+        <div class="gate-ctrl-label">Gate Keluar</div>
+        <div class="gate-ctrl-status" id="statusKeluar">Siap</div>
+        <button class="gate-ctrl-btn exit-btn" id="btnKeluar" onclick="bukaGate('keluar')">
+          <i class="fas fa-lock-open me-2"></i>Buka Palang
+        </button>
+      </div>
+
     </div>
 
-    <!-- Icon gate -->
-    <div class="gate-icon-box gate-entry-bg" id="gateIconBox">
-      <i class="fas fa-sign-in-alt" id="gateIconEl"></i>
-    </div>
-    <div class="gate-status-label" id="gateStatusLabel">GATE MASUK — SIAP</div>
+    <div id="ctrlResult" class="scan-result mt-4" style="display:none;"></div>
 
-    <!-- Input token -->
-    <div class="mt-4 text-start">
-      <label class="form-label"><i class="fas fa-qrcode me-1"></i>Token QR Code</label>
-      <textarea class="form-control" id="qrToken" rows="3"
-                placeholder="Paste token dari halaman Mytiketgw..."
-                style="font-family:monospace; font-size:12px; resize:none;"></textarea>
-      <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">
-        💡 Token tersedia di bawah tiket pada halaman <strong>Mytiketgw</strong>. Tekan Enter untuk scan.
+    <div class="gate-note mt-3">
+      <i class="fas fa-info-circle me-1"></i>
+      Perintah dikirim ke ESP32 melalui polling API. Palang akan menutup otomatis setelah kendaraan melewatinya atau timeout 8 detik.
+    </div>
+  </div>
+
+  <!-- Scan QR via USB Scanner -->
+  <div class="card p-4 mb-4">
+    <h6 class="gate-section-title">
+      <i class="fas fa-barcode me-2" style="color:var(--primary);"></i>Scanner USB / Keyboard
+    </h6>
+    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
+      Hubungkan scanner barcode ke laptop. Arahkan kursor ke field di bawah, lalu scan QR tiket. Sistem akan otomatis menentukan masuk atau keluar.
+    </p>
+
+    <div class="scanner-input-wrap">
+      <input type="text" id="scannerInput" class="form-control scanner-input"
+             placeholder="Fokus di sini, lalu scan QR Code..."
+             autocomplete="off" autocorrect="off" spellcheck="false"
+             onkeydown="handleScannerKey(event)">
+      <div class="scanner-indicator" id="scannerIndicator">
+        <i class="fas fa-circle"></i> Menunggu scan
       </div>
     </div>
 
-    <button class="btn-primary-custom mt-3" id="scanBtn" onclick="scanQR()">
-      <i class="fas fa-qrcode"></i> Scan &amp; Validasi
-    </button>
-
-    <div class="scan-result" id="scanResult"></div>
+    <div id="scanResult" class="scan-result mt-3" style="display:none;"></div>
   </div>
 
   <!-- Riwayat -->
   <div class="card p-4">
-    <h6 style="font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
-               color:var(--text-secondary); margin-bottom:16px;">
-      <i class="fas fa-history me-1"></i>Riwayat Scan
+    <h6 class="gate-section-title">
+      <i class="fas fa-history me-2" style="color:var(--primary);"></i>Riwayat Aktivitas Gate
     </h6>
     <div id="scanHistory">
       <div style="font-size:13px; color:var(--text-muted); text-align:center; padding:20px 0;">
-        Belum ada riwayat scan sesi ini
+        Belum ada aktivitas sesi ini
       </div>
     </div>
   </div>
@@ -58,89 +88,164 @@
 
 {% block scripts %}
 <script>
-let gateType = 'entry';
-let history  = [];
+let scanHistory = [];
+let scanBuffer  = '';
+let scanTimer   = null;
 
-function setGate(type) {
-  gateType = type;
-  const btnE = document.getElementById('btnEntry');
-  const btnX = document.getElementById('btnExit');
-  const box  = document.getElementById('gateIconBox');
-  const icon = document.getElementById('gateIconEl');
-  const lbl  = document.getElementById('gateStatusLabel');
+// ── Kontrol Servo Manual ──────────────────────────────────────────
+async function bukaGate(gate) {
+  const btnId     = gate === 'masuk' ? 'btnMasuk' : 'btnKeluar';
+  const statusId  = gate === 'masuk' ? 'statusMasuk' : 'statusKeluar';
+  const btn       = document.getElementById(btnId);
+  const statusEl  = document.getElementById(statusId);
+  const resultEl  = document.getElementById('ctrlResult');
 
-  if (type === 'entry') {
-    btnE.className = 'gate-type-btn active-entry';
-    btnX.className = 'gate-type-btn';
-    box.className  = 'gate-icon-box gate-entry-bg';
-    icon.className = 'fas fa-sign-in-alt';
-    lbl.textContent = 'GATE MASUK — SIAP';
-  } else {
-    btnE.className = 'gate-type-btn';
-    btnX.className = 'gate-type-btn active-exit';
-    box.className  = 'gate-icon-box gate-exit-bg';
-    icon.className = 'fas fa-sign-out-alt';
-    lbl.textContent = 'GATE KELUAR — SIAP';
-  }
-}
-
-async function scanQR() {
-  const token = document.getElementById('qrToken').value.trim();
-  if (!token) { showResult('⚠️ Masukkan token QR terlebih dahulu!', false); return; }
-
-  const btn = document.getElementById('scanBtn');
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memvalidasi...';
-  btn.disabled  = true;
-
-  const fd = new FormData();
-  fd.append('qr_token', token);
-  fd.append('gate_type', gateType);
+  btn.disabled    = true;
+  btn.innerHTML   = '<i class="fas fa-spinner fa-spin me-2"></i>Mengirim...';
+  statusEl.textContent = 'Mengirim...';
+  statusEl.className   = 'gate-ctrl-status sending';
 
   try {
-    const res  = await fetch('/gate/scan', { method:'POST', body: fd });
+    const res  = await fetch('/api/gate/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gate_id: 'ESP32-GATE', gate })
+    });
     const data = await res.json();
-    showResult(data.message, data.success);
-    if (data.success) {
-      document.getElementById('qrToken').value = '';
-      addHistory(data, gateType);
+
+    if (data.ok) {
+      statusEl.textContent = 'Terbuka';
+      statusEl.className   = 'gate-ctrl-status open';
+      showCtrlResult(`Palang <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> berhasil dibuka`, true);
+      addHistory({ type: gate === 'masuk' ? 'entry' : 'exit', slot: 'MANUAL', vehicle: 'Override Admin',
+                   time: new Date().toLocaleTimeString('id-ID') });
+      setTimeout(() => {
+        statusEl.textContent = 'Siap';
+        statusEl.className   = 'gate-ctrl-status';
+      }, 9000);
+    } else {
+      statusEl.textContent = 'Gagal';
+      statusEl.className   = 'gate-ctrl-status error';
+      showCtrlResult('Gagal mengirim perintah ke server', false);
+      setTimeout(() => { statusEl.textContent='Siap'; statusEl.className='gate-ctrl-status'; }, 3000);
     }
   } catch {
-    showResult('❌ Gagal terhubung ke server!', false);
+    statusEl.textContent = 'Error';
+    statusEl.className   = 'gate-ctrl-status error';
+    showCtrlResult('Tidak bisa terhubung ke server', false);
+    setTimeout(() => { statusEl.textContent='Siap'; statusEl.className='gate-ctrl-status'; }, 3000);
   }
 
-  btn.innerHTML = '<i class="fas fa-qrcode"></i> Scan &amp; Validasi';
   btn.disabled  = false;
+  btn.innerHTML = gate === 'masuk'
+    ? '<i class="fas fa-lock-open me-2"></i>Buka Palang'
+    : '<i class="fas fa-lock-open me-2"></i>Buka Palang';
 }
 
-function showResult(msg, ok) {
-  const el = document.getElementById('scanResult');
+function showCtrlResult(msg, ok) {
+  const el = document.getElementById('ctrlResult');
   el.style.display = 'block';
   el.className = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
-  el.innerHTML = msg;
+  el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
   setTimeout(() => el.style.display = 'none', 5000);
 }
 
-function addHistory(data, type) {
-  history.unshift({ type, slot: data.slot, vehicle: data.vehicle||'—',
-                    time: new Date().toLocaleTimeString('id-ID'), duration: data.duration||null });
-  const el = document.getElementById('scanHistory');
-  el.innerHTML = history.slice(0,10).map(h => `
-    <div class="history-item ${h.type === 'entry' ? 'hi-in' : 'hi-out'}">
-      <div class="hi-dot ${h.type === 'entry' ? 'dot-in' : 'dot-out'}">
-        <i class="fas fa-sign-${h.type === 'entry' ? 'in' : 'out'}-alt"></i>
-      </div>
-      <div>
-        <div style="font-weight:700; font-size:13px;">Slot ${h.slot}${h.vehicle!=='—'?' — '+h.vehicle:''}</div>
-        <div style="font-size:11px; color:var(--text-muted);">
-          ${h.type==='entry'?'Masuk':'Keluar'} • ${h.time}${h.duration?' • Durasi: '+h.duration:''}
-        </div>
-      </div>
-    </div>
-  `).join('');
+// ── USB Scanner Input ─────────────────────────────────────────────
+const scannerInput = document.getElementById('scannerInput');
+const indicator    = document.getElementById('scannerIndicator');
+
+// Auto-fokus saat halaman dimuat
+scannerInput.focus();
+
+// Refokus jika user klik area lain
+document.addEventListener('click', e => {
+  if (!e.target.closest('button') && !e.target.closest('a')) {
+    scannerInput.focus();
+  }
+});
+
+function handleScannerKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const token = scannerInput.value.trim();
+    if (token.length > 10) {
+      processToken(token);
+    }
+    scannerInput.value = '';
+  }
 }
 
-document.getElementById('qrToken').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); scanQR(); }
-});
+// Deteksi otomatis entry vs exit berdasarkan status reservasi
+async function processToken(token) {
+  indicator.innerHTML = '<i class="fas fa-circle blink" style="color:#F59E0B;"></i> Memvalidasi...';
+
+  // Coba entry dulu; jika sudah masuk, otomatis exit
+  const result = await scanGate(token, 'entry');
+  if (!result.success && result.message && result.message.includes('sudah tercatat masuk')) {
+    const exitResult = await scanGate(token, 'exit');
+    showScanResult(exitResult.message, exitResult.success);
+    if (exitResult.success) addHistory({ type: 'exit', ...exitResult });
+  } else {
+    showScanResult(result.message, result.success);
+    if (result.success) addHistory({ type: 'entry', ...result });
+  }
+
+  indicator.innerHTML = '<i class="fas fa-circle" style="color:#10B981;"></i> Siap scan berikutnya';
+  setTimeout(() => {
+    indicator.innerHTML = '<i class="fas fa-circle"></i> Menunggu scan';
+  }, 3000);
+}
+
+async function scanGate(token, gateType) {
+  try {
+    const fd = new FormData();
+    fd.append('qr_token',  token);
+    fd.append('gate_type', gateType);
+    fd.append('gate_id',   'WEB-SCANNER');
+    const res  = await fetch('/gate/scan', { method: 'POST', body: fd });
+    return await res.json();
+  } catch {
+    return { success: false, message: 'Gagal terhubung ke server!' };
+  }
+}
+
+function showScanResult(msg, ok) {
+  const el = document.getElementById('scanResult');
+  el.style.display = 'block';
+  el.className = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
+  el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
+  setTimeout(() => el.style.display = 'none', 6000);
+}
+
+function addHistory(data) {
+  const isEntry = data.type === 'entry';
+  scanHistory.unshift({
+    type:     data.type,
+    slot:     data.slot    || 'MANUAL',
+    vehicle:  data.vehicle || 'Override Admin',
+    time:     data.time    || new Date().toLocaleTimeString('id-ID'),
+    duration: data.duration || null
+  });
+
+  const el = document.getElementById('scanHistory');
+  el.innerHTML = scanHistory.slice(0, 15).map(h => {
+    const isIn = h.type === 'entry';
+    return `
+      <div class="history-item ${isIn ? 'hi-in' : 'hi-out'}">
+        <div class="hi-dot ${isIn ? 'dot-in' : 'dot-out'}">
+          <i class="fas fa-sign-${isIn ? 'in' : 'out'}-alt"></i>
+        </div>
+        <div>
+          <div style="font-weight:700; font-size:13px;">
+            Slot ${h.slot}${h.vehicle && h.vehicle !== 'Override Admin' ? ' — ' + h.vehicle : ''}
+            ${h.vehicle === 'Override Admin' ? '<span style="font-size:11px;color:var(--warning);margin-left:6px;">MANUAL</span>' : ''}
+          </div>
+          <div style="font-size:11px; color:var(--text-muted);">
+            ${isIn ? 'Masuk' : 'Keluar'} · ${h.time}${h.duration ? ' · Durasi: ' + h.duration : ''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
 </script>
 {% endblock %}
