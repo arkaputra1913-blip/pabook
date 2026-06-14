@@ -139,6 +139,8 @@ function handleScannerKey(e) {
   if (e.key === 'Enter') {
     e.preventDefault();
     const token = scannerInput.value.trim();
+    console.log('Token diterima:', token);        // ← tambah ini
+    console.log('Panjang token:', token.length);  // ← dan ini
     scannerInput.value = '';
     if (token.length > 10 && !scannerBusy) processToken(token);
   }
