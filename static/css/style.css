@@ -1,8 +1,3 @@
-/* ─────────────────────────────────────────
-   VARIABLES — Microsoft palette
-   Blue   #0078D4  Green  #7CB900
-   Red    #F25022  Yellow #FFB900
-───────────────────────────────────────── */
 :root {
   --primary:          #0078D4;
   --primary-light:    #2B88D8;
@@ -40,7 +35,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Inter', -apple-system, sans-serif;
+  font-family: system-ui, sans-serif;
   background: var(--bg-body);
   color: var(--text-primary);
   overflow-x: hidden;
