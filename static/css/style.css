@@ -219,34 +219,72 @@ body {
    PARKING LAYOUT
 ───────────────────────────────────────── */
 .slot-grid-container {
-  background: #F0F6FC;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(255,255,255,.018) 2px,
+      rgba(255,255,255,.018) 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 3px,
+      rgba(255,255,255,.012) 3px,
+      rgba(255,255,255,.012) 6px
+    ),
+    linear-gradient(160deg, #2E2E2E 0%, #1A1A1A 50%, #252525 100%);
   border-radius: var(--radius);
   padding: 18px;
-  border: 1.5px solid #C7DDEF;
+  border: 2px solid #111;
 }
 
-.parking-layout { display: flex; gap: 14px; align-items: flex-start; }
-.main-zones { flex: 1; }
+.parking-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 14px;
+  align-items: flex-end;
+  min-height: 320px;
+}
 
-/* Zone label — hidden per request */
-.zone-label { display: none; }
+.main-zones {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  align-items: end;
+  gap: 7px;
+}
 
-.zone-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px !important; }
-.zone-row:last-child { margin-bottom: 0 !important; }
-.slots-row { display: flex; gap: 7px; flex-wrap: wrap; }
+/* Each zone-row becomes a column of slots */
+.zone-row {
+  display: flex;
+  flex-direction: column-reverse; /* A1 bottom, A4 top */
+  gap: 7px;
+  margin-bottom: 0 !important;
+  align-items: center;
+}
+.slots-row { display: flex; flex-direction: column-reverse; gap: 7px; }
 
 /* ── SLOT BUTTONS ── */
 .slot-btn {
-  width: 52px; height: 52px;
+  width: 64px; height: 40px;
   border-radius: 5px;
   border: none;
-  font-size: 10.5px; font-weight: 800; letter-spacing: .3px;
+  font-size: 10px; font-weight: 800; letter-spacing: .3px;
   cursor: pointer; transition: all .16s ease;
   display: flex; align-items: center; justify-content: center;
   animation: fadeInUp .28s ease forwards;
-  box-shadow: 0 2px 6px rgba(0,0,0,.14);
+  box-shadow: 0 3px 8px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.15);
 }
 .slot-btn.no-anim { animation: none; }
+
+/* Zone D slots — portrait (tall) */
+.zone-d-column .slot-btn,
+.slots-col .slot-btn {
+  width: 42px;
+  height: 64px;
+}
 
 /* Available — Microsoft Green */
 .slot-btn.available {
@@ -293,13 +331,13 @@ body {
 .aisle-line { display: none; }
 .aisle-label { display: none; }
 
-.zone-d-column { display: flex; flex-direction: column; gap: 5px; align-items: center; }
-.slots-col     { display: flex; flex-direction: column; gap: 7px; }
+.zone-d-column { display: flex; flex-direction: column-reverse; gap: 5px; align-items: center; }
+.slots-col     { display: flex; flex-direction: column-reverse; gap: 7px; }
 
 .slot-legend {
   display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
 }
-.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: rgba(255,255,255,.75); font-weight: 600; }
 .legend-dot {
   width: 13px; height: 13px; border-radius: 3px;
 }
@@ -658,17 +696,29 @@ body {
 /* ─────────────────────────────────────────
    ADMIN TABLE
 ───────────────────────────────────────── */
-.table-scroll { overflow-x: auto; border-radius: var(--radius); }
-.act-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+.table-scroll { overflow-x: auto; border-radius: 6px; overflow: hidden; border: 1.5px solid #CBD5E1; }
+.act-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .act-table th {
-  background: #F0F6FC; color: var(--text-muted);
-  font-weight: 700; font-size: 10.5px; letter-spacing: 1px; text-transform: uppercase;
-  padding: 12px 15px; border-bottom: 2px solid var(--border-solid);
+  background: linear-gradient(90deg, #1E3A5F 0%, #16304F 100%);
+  color: rgba(255,255,255,.85);
+  font-weight: 700; font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase;
+  padding: 13px 15px;
+  border-bottom: 2px solid #0F2540;
+  border-right: 1px solid rgba(255,255,255,.1);
   white-space: nowrap;
 }
-.act-table td { padding: 12px 15px; border-bottom: 1px solid var(--border-solid); vertical-align: middle; }
+.act-table th:last-child { border-right: none; }
+.act-table td {
+  padding: 11px 15px;
+  border-bottom: 1px solid #E2E8F0;
+  border-right: 1px solid #E2E8F0;
+  vertical-align: middle;
+}
+.act-table td:last-child { border-right: none; }
+.act-table tbody tr:nth-child(even) { background: #FFFFFF; }
+.act-table tbody tr:nth-child(odd)  { background: #FFFFFF; }
 .act-table tbody tr { transition: background .12s ease; }
-.act-table tbody tr:hover { background: #F0F6FC; }
+.act-table tbody tr:hover { background: #EFF6FF; }
 .act-table tbody tr:last-child td { border-bottom: none; }
 
 .text-muted-sm { font-size: 11.5px; color: var(--text-muted); }
@@ -693,13 +743,21 @@ body {
 .mini-stat-box {
   padding: 16px; border-radius: var(--radius-sm); text-align: center;
 }
-.mini-stat-box.purple { background: rgba(0,120,212,.08); border: 1.5px solid rgba(0,120,212,.18); }
-.mini-stat-box.green  { background: rgba(124,185,0,.1);  border: 1.5px solid rgba(124,185,0,.25); }
-.mini-stat-box .ms-val  { font-size: 32px; font-weight: 900; color: var(--primary); }
-.mini-stat-box.green .ms-val { color: #5E8F00; }
+.mini-stat-box.purple {
+  background: linear-gradient(135deg, #E8720C 0%, #B85500 100%);
+  border: none;
+  box-shadow: 0 4px 14px rgba(232,114,12,.45);
+}
+.mini-stat-box.green  {
+  background: linear-gradient(135deg, #0891B2 0%, #0E5F78 100%);
+  border: none;
+  box-shadow: 0 4px 14px rgba(8,145,178,.4);
+}
+.mini-stat-box .ms-val  { font-size: 32px; font-weight: 900; color: #fff; }
+.mini-stat-box.green .ms-val { color: #fff; }
 .mini-stat-box .ms-label {
   font-size: 10px; font-weight: 700; letter-spacing: 1px;
-  text-transform: uppercase; color: var(--text-muted); margin-top: 4px;
+  text-transform: uppercase; color: rgba(255,255,255,.72); margin-top: 4px;
 }
 
 /* reset slot button */
@@ -798,7 +856,8 @@ body {
   .sidebar-brand { justify-content: center; }
   .main-content { margin-left: 54px; }
   .content-area { padding: 18px 14px; }
-  .slot-btn { width: 44px; height: 44px; font-size: 9.5px; }
+  .slot-btn { width: 34px; height: 52px; font-size: 8.5px; }
+  .zone-d-column .slot-btn, .slots-col .slot-btn { width: 52px; height: 32px; }
   .ticket-body { flex-direction: column; }
   .ticket-qr { width: 100%; border-left: none; border-top: 1.5px dashed #C7DDEF; padding-left: 0; padding-top: 18px; }
   .parking-layout { flex-wrap: wrap; }
