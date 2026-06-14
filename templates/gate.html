@@ -90,7 +90,7 @@
 <script>
 let scanHistory = [];
 
-// ID gate harus sama persis dengan yang ada di ESP32
+// ID gate harus sama persis dengan GATE_ENTRY_ID / GATE_EXIT_ID di ESP32
 const GATE_IDS = {
   masuk:  'GATE-MASUK-A',
   keluar: 'GATE-KELUAR-A'
@@ -112,7 +112,6 @@ async function bukaGate(gate) {
     const res  = await fetch('/api/gate/open', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      // FIX: pakai gate_id sesuai ID di ESP32, bukan 'ESP32-GATE'
       body: JSON.stringify({ gate_id: GATE_IDS[gate], gate })
     });
     const data = await res.json();
@@ -127,7 +126,6 @@ async function bukaGate(gate) {
         vehicle: 'Override Admin',
         time:    new Date().toLocaleTimeString('id-ID')
       });
-      // Reset status setelah GATE_OPEN_MS (8 detik) + sedikit buffer
       setTimeout(() => {
         statusEl.textContent = 'Siap';
         statusEl.className   = 'gate-ctrl-status';
@@ -184,7 +182,7 @@ function handleScannerKey(e) {
 async function processToken(token) {
   indicator.innerHTML = '<i class="fas fa-circle blink" style="color:#F59E0B;"></i> Memvalidasi...';
 
-  // Coba entry dulu; jika sudah masuk (checked_in), otomatis alihkan ke exit
+  // Coba entry dulu; jika sudah checked_in, alihkan ke exit
   const entryResult = await scanGate(token, 'entry');
 
   if (!entryResult.success && entryResult.message && entryResult.message.includes('sudah tercatat masuk')) {
@@ -202,13 +200,18 @@ async function processToken(token) {
   }, 3000);
 }
 
+// FIXED: gate_id sekarang pakai GATE_IDS sesuai gate_type, bukan 'WEB-SCANNER'
 async function scanGate(token, gateType) {
   try {
-    const fd = new FormData();
-    fd.append('qr_token',  token);
-    fd.append('gate_type', gateType);
-    fd.append('gate_id',   'WEB-SCANNER');
-    const res = await fetch('/gate/scan', { method: 'POST', body: fd });
+    const res = await fetch('/gate/scan', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        qr_token:  token,
+        gate_type: gateType,
+        gate_id:   gateType === 'entry' ? GATE_IDS.masuk : GATE_IDS.keluar
+      })
+    });
     return await res.json();
   } catch {
     return { success: false, message: 'Gagal terhubung ke server!' };
