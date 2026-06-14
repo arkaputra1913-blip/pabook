@@ -5,19 +5,16 @@
 <div class="gate-container" style="max-width:600px;">
   <h1 class="page-title text-center">Kontrol Gate</h1>
 
-  <!-- Kontrol Gate -->
   <div class="gate-card mb-4">
     <div class="gate-ctrl-grid">
 
-      <!-- Gate Masuk -->
       <div class="gate-ctrl-box entry-box">
         <div class="gate-ctrl-label">Gate Masuk</div>
         <div style="display:flex; gap:8px; margin-top:8px;">
-          <button class="gate-ctrl-btn entry-btn" id="btnBukaMasuk" onclick="bukaGate('masuk')" style="flex:1;">
+          <button class="gate-ctrl-btn entry-btn" onclick="bukaGate('masuk')" style="flex:1;">
             <i class="fas fa-lock-open me-1"></i>Buka
           </button>
-          <button class="gate-ctrl-btn" id="btnTutupMasuk" onclick="tutupGate('masuk')"
-                  style="flex:1; opacity:0.45;" disabled>
+          <button class="gate-ctrl-btn" onclick="tutupGate('masuk')" style="flex:1;">
             <i class="fas fa-lock me-1"></i>Tutup
           </button>
         </div>
@@ -29,26 +26,22 @@
         <div class="gate-div-line"></div>
       </div>
 
-      <!-- Gate Keluar -->
       <div class="gate-ctrl-box exit-box">
         <div class="gate-ctrl-label">Gate Keluar</div>
         <div style="display:flex; gap:8px; margin-top:8px;">
-          <button class="gate-ctrl-btn exit-btn" id="btnBukaKeluar" onclick="bukaGate('keluar')" style="flex:1;">
+          <button class="gate-ctrl-btn exit-btn" onclick="bukaGate('keluar')" style="flex:1;">
             <i class="fas fa-lock-open me-1"></i>Buka
           </button>
-          <button class="gate-ctrl-btn" id="btnTutupKeluar" onclick="tutupGate('keluar')"
-                  style="flex:1; opacity:0.45;" disabled>
+          <button class="gate-ctrl-btn" onclick="tutupGate('keluar')" style="flex:1;">
             <i class="fas fa-lock me-1"></i>Tutup
           </button>
         </div>
       </div>
 
     </div>
-
     <div id="ctrlResult" class="scan-result mt-4" style="display:none;"></div>
   </div>
 
-  <!-- Scan QR via USB Scanner -->
   <div class="card p-4">
     <h6 class="gate-section-title">
       <i class="fas fa-barcode me-2" style="color:var(--primary);"></i>Scanner USB / Keyboard
@@ -62,7 +55,6 @@
         <i class="fas fa-circle"></i> Menunggu scan
       </div>
     </div>
-
     <div id="scanResult" class="scan-result" style="display:none;"></div>
   </div>
 </div>
@@ -77,44 +69,38 @@ const GATE_IDS = {
   keluar: 'GATE-KELUAR-A'
 };
 
-// ── Kontrol Manual Gate ──────────────────────────────────────────
-
 async function bukaGate(gate) {
-  const btn = document.getElementById(gate === 'masuk' ? 'btnBukaMasuk' : 'btnBukaKeluar');
-  btn.disabled = true; btn.style.opacity = '0.45';
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
   try {
     const res  = await fetch('/api/gate/open', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ gate_id: GATE_IDS[gate], gate })
     });
     const data = await res.json();
-    showCtrlResult(data.ok
-      ? `Perintah buka <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim`
-      : 'Gagal mengirim perintah', data.ok);
-    if (!data.ok) { btn.disabled = false; btn.style.opacity = '1'; }
+    showCtrlResult(
+      data.ok ? `Perintah buka <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim`
+              : 'Gagal mengirim perintah',
+      data.ok
+    );
   } catch {
     showCtrlResult('Tidak bisa terhubung ke server', false);
-    btn.disabled = false; btn.style.opacity = '1';
   }
-  btn.innerHTML = '<i class="fas fa-lock-open me-1"></i>Buka';
 }
 
 async function tutupGate(gate) {
-  const btn = document.getElementById(gate === 'masuk' ? 'btnTutupMasuk' : 'btnTutupKeluar');
-  btn.disabled = true; btn.style.opacity = '0.45';
-  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
   try {
     const res  = await fetch('/api/gate/close', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ gate_id: GATE_IDS[gate], gate })
     });
     const data = await res.json();
-    showCtrlResult(data.ok
-      ? `Perintah tutup <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim`
-      : 'Gagal mengirim perintah tutup', data.ok);
-  } catch { showCtrlResult('Tidak bisa terhubung ke server', false); }
-  btn.innerHTML = '<i class="fas fa-lock me-1"></i>Tutup';
+    showCtrlResult(
+      data.ok ? `Perintah tutup <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim`
+              : 'Gagal mengirim perintah tutup',
+      data.ok
+    );
+  } catch {
+    showCtrlResult('Tidak bisa terhubung ke server', false);
+  }
 }
 
 function showCtrlResult(msg, ok) {
@@ -124,8 +110,6 @@ function showCtrlResult(msg, ok) {
   el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
   setTimeout(() => el.style.display = 'none', 5000);
 }
-
-// ── USB Scanner Input ────────────────────────────────────────────
 
 const scannerInput = document.getElementById('scannerInput');
 const indicator    = document.getElementById('scannerIndicator');
@@ -139,33 +123,24 @@ function handleScannerKey(e) {
   if (e.key === 'Enter') {
     e.preventDefault();
     const token = scannerInput.value.trim();
-    console.log('Token diterima:', token);        // ← tambah ini
-    console.log('Panjang token:', token.length);  // ← dan ini
     scannerInput.value = '';
     if (token.length > 10 && !scannerBusy) processToken(token);
   }
 }
 
-// ── Proses Token QR ──────────────────────────────────────────────
-// Pakai /gate/scan/auto → server yang tentukan masuk atau keluar
-// berdasarkan status reservasi di database.
-
 async function processToken(token) {
   scannerBusy = true;
   indicator.innerHTML = '<i class="fas fa-circle blink" style="color:#FFB900;"></i> Memvalidasi...';
-
   try {
     const res    = await fetch('/gate/scan/auto', {
-      method:  'POST',
-      headers: {'Content-Type': 'application/json'},
-      body:    JSON.stringify({ qr_token: token })
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ qr_token: token })
     });
     const result = await res.json();
     showScanResult(result.message, result.success);
   } catch {
     showScanResult('Gagal terhubung ke server!', false);
   }
-
   indicator.innerHTML = '<i class="fas fa-circle" style="color:#7CB900;"></i> Siap scan berikutnya';
   setTimeout(() => {
     indicator.innerHTML = '<i class="fas fa-circle"></i> Menunggu scan';
