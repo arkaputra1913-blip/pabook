@@ -6,7 +6,7 @@
   <h1 class="page-title text-center">Kontrol Gate</h1>
   <p class="page-subtitle text-center">Panel kendali palang parkir — masuk &amp; keluar</p>
 
-  <!-- Kontrol Servo -->
+  <!-- Kontrol Gate -->
   <div class="gate-card mb-4">
     <div class="gate-ctrl-grid">
 
@@ -16,10 +16,16 @@
           <i class="fas fa-sign-in-alt"></i>
         </div>
         <div class="gate-ctrl-label">Gate Masuk</div>
-        <div class="gate-ctrl-status" id="statusMasuk">Siap</div>
-        <button class="gate-ctrl-btn entry-btn" id="btnMasuk" onclick="bukaGate('masuk')">
-          <i class="fas fa-lock-open me-2"></i>Buka Palang
-        </button>
+        <div class="gate-ctrl-status" id="statusMasuk">Memuat...</div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="gate-ctrl-btn entry-btn" id="btnBukaMasuk" onclick="bukaGate('masuk')" style="flex:1;">
+            <i class="fas fa-lock-open me-1"></i>Buka
+          </button>
+          <button class="gate-ctrl-btn" id="btnTutupMasuk" onclick="tutupGate('masuk')"
+                  style="flex:1; background:var(--danger,#ef4444); color:#fff; opacity:0.4;" disabled>
+            <i class="fas fa-lock me-1"></i>Tutup
+          </button>
+        </div>
       </div>
 
       <div class="gate-divider">
@@ -34,10 +40,16 @@
           <i class="fas fa-sign-out-alt"></i>
         </div>
         <div class="gate-ctrl-label">Gate Keluar</div>
-        <div class="gate-ctrl-status" id="statusKeluar">Siap</div>
-        <button class="gate-ctrl-btn exit-btn" id="btnKeluar" onclick="bukaGate('keluar')">
-          <i class="fas fa-lock-open me-2"></i>Buka Palang
-        </button>
+        <div class="gate-ctrl-status" id="statusKeluar">Memuat...</div>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button class="gate-ctrl-btn exit-btn" id="btnBukaKeluar" onclick="bukaGate('keluar')" style="flex:1;">
+            <i class="fas fa-lock-open me-1"></i>Buka
+          </button>
+          <button class="gate-ctrl-btn" id="btnTutupKeluar" onclick="tutupGate('keluar')"
+                  style="flex:1; background:var(--danger,#ef4444); color:#fff; opacity:0.4;" disabled>
+            <i class="fas fa-lock me-1"></i>Tutup
+          </button>
+        </div>
       </div>
 
     </div>
@@ -46,7 +58,7 @@
 
     <div class="gate-note mt-3">
       <i class="fas fa-info-circle me-1"></i>
-      Perintah dikirim ke ESP32 melalui polling API. Palang akan menutup otomatis setelah kendaraan melewatinya atau timeout 8 detik.
+      Status diperbarui otomatis tiap 2 detik dari ESP32. Palang menutup sendiri setelah kendaraan lewat atau timeout 8 detik.
     </div>
   </div>
 
@@ -56,7 +68,7 @@
       <i class="fas fa-barcode me-2" style="color:var(--primary);"></i>Scanner USB / Keyboard
     </h6>
     <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
-      Hubungkan scanner barcode ke laptop. Arahkan kursor ke field di bawah, lalu scan QR tiket. Sistem akan otomatis menentukan masuk atau keluar.
+      Hubungkan scanner barcode ke laptop. Arahkan kursor ke field di bawah, lalu scan QR tiket. Sistem otomatis menentukan masuk atau keluar.
     </p>
 
     <div class="scanner-input-wrap">
@@ -89,6 +101,7 @@
 {% block scripts %}
 <script>
 let scanHistory = [];
+let scannerBusy = false;  // Cegah double-scan saat sedang proses
 
 // ID gate harus sama persis dengan GATE_ENTRY_ID / GATE_EXIT_ID di ESP32
 const GATE_IDS = {
@@ -96,17 +109,58 @@ const GATE_IDS = {
   keluar: 'GATE-KELUAR-A'
 };
 
-// ── Kontrol Servo Manual ──────────────────────────────────────────
-async function bukaGate(gate) {
-  const btnId    = gate === 'masuk' ? 'btnMasuk' : 'btnKeluar';
-  const statusId = gate === 'masuk' ? 'statusMasuk' : 'statusKeluar';
-  const btn      = document.getElementById(btnId);
-  const statusEl = document.getElementById(statusId);
+// ── Status Realtime dari ESP32 ────────────────────────────────────
+async function refreshGateStatus() {
+  try {
+    const res  = await fetch('/api/gate/status');
+    const data = await res.json();
 
-  btn.disabled         = true;
-  btn.innerHTML        = '<i class="fas fa-spinner fa-spin me-2"></i>Mengirim...';
-  statusEl.textContent = 'Mengirim...';
-  statusEl.className   = 'gate-ctrl-status sending';
+    updateStatusUI('masuk',  data['GATE-MASUK-A']);
+    updateStatusUI('keluar', data['GATE-KELUAR-A']);
+  } catch {
+    // Server tidak bisa dijangkau, biarkan status terakhir
+  }
+}
+
+function updateStatusUI(gate, info) {
+  const statusEl     = document.getElementById(gate === 'masuk' ? 'statusMasuk'     : 'statusKeluar');
+  const btnBuka      = document.getElementById(gate === 'masuk' ? 'btnBukaMasuk'    : 'btnBukaKeluar');
+  const btnTutup     = document.getElementById(gate === 'masuk' ? 'btnTutupMasuk'   : 'btnTutupKeluar');
+
+  if (!info) {
+    // Belum ada laporan dari ESP32
+    statusEl.textContent = 'Tidak diketahui';
+    statusEl.className   = 'gate-ctrl-status';
+    btnBuka.disabled     = false;
+    btnBuka.style.opacity = '1';
+    btnTutup.disabled    = true;
+    btnTutup.style.opacity = '0.4';
+    return;
+  }
+
+  const isOpen = info.state === 'open';
+  statusEl.textContent = isOpen ? '🟢 Terbuka' : '🔴 Tertutup';
+  statusEl.className   = `gate-ctrl-status ${isOpen ? 'open' : ''}`;
+
+  // Tombol Buka hanya aktif kalau gate tertutup
+  btnBuka.disabled      = isOpen;
+  btnBuka.style.opacity = isOpen ? '0.4' : '1';
+
+  // Tombol Tutup hanya aktif kalau gate terbuka
+  btnTutup.disabled      = !isOpen;
+  btnTutup.style.opacity = isOpen ? '1' : '0.4';
+}
+
+// Polling status tiap 2 detik
+refreshGateStatus();
+setInterval(refreshGateStatus, 2000);
+
+// ── Kontrol Manual ────────────────────────────────────────────────
+async function bukaGate(gate) {
+  const btnBuka  = document.getElementById(gate === 'masuk' ? 'btnBukaMasuk'  : 'btnBukaKeluar');
+  btnBuka.disabled     = true;
+  btnBuka.style.opacity = '0.4';
+  btnBuka.innerHTML    = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
 
   try {
     const res  = await fetch('/api/gate/open', {
@@ -117,34 +171,46 @@ async function bukaGate(gate) {
     const data = await res.json();
 
     if (data.ok) {
-      statusEl.textContent = 'Terbuka';
-      statusEl.className   = 'gate-ctrl-status open';
-      showCtrlResult(`Palang <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> berhasil dibuka`, true);
-      addHistory({
-        type:    gate === 'masuk' ? 'entry' : 'exit',
-        slot:    'MANUAL',
-        vehicle: 'Override Admin',
-        time:    new Date().toLocaleTimeString('id-ID')
-      });
-      setTimeout(() => {
-        statusEl.textContent = 'Siap';
-        statusEl.className   = 'gate-ctrl-status';
-      }, 9000);
+      showCtrlResult(`Perintah buka <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim ke ESP32`, true);
+      addHistory({ type: gate === 'masuk' ? 'entry' : 'exit', slot: 'MANUAL', vehicle: 'Override Admin' });
     } else {
-      statusEl.textContent = 'Gagal';
-      statusEl.className   = 'gate-ctrl-status error';
-      showCtrlResult('Gagal mengirim perintah ke server', false);
-      setTimeout(() => { statusEl.textContent = 'Siap'; statusEl.className = 'gate-ctrl-status'; }, 3000);
+      showCtrlResult('Gagal mengirim perintah', false);
+      btnBuka.disabled = false;
+      btnBuka.style.opacity = '1';
     }
   } catch {
-    statusEl.textContent = 'Error';
-    statusEl.className   = 'gate-ctrl-status error';
     showCtrlResult('Tidak bisa terhubung ke server', false);
-    setTimeout(() => { statusEl.textContent = 'Siap'; statusEl.className = 'gate-ctrl-status'; }, 3000);
+    btnBuka.disabled = false;
+    btnBuka.style.opacity = '1';
   }
 
-  btn.disabled  = false;
-  btn.innerHTML = '<i class="fas fa-lock-open me-2"></i>Buka Palang';
+  btnBuka.innerHTML = '<i class="fas fa-lock-open me-1"></i>Buka';
+}
+
+async function tutupGate(gate) {
+  const btnTutup = document.getElementById(gate === 'masuk' ? 'btnTutupMasuk' : 'btnTutupKeluar');
+  btnTutup.disabled      = true;
+  btnTutup.style.opacity = '0.4';
+  btnTutup.innerHTML     = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
+
+  try {
+    const res  = await fetch('/api/gate/close', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gate_id: GATE_IDS[gate], gate })
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      showCtrlResult(`Perintah tutup <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim ke ESP32`, true);
+    } else {
+      showCtrlResult('Gagal mengirim perintah tutup', false);
+    }
+  } catch {
+    showCtrlResult('Tidak bisa terhubung ke server', false);
+  }
+
+  btnTutup.innerHTML = '<i class="fas fa-lock me-1"></i>Tutup';
 }
 
 function showCtrlResult(msg, ok) {
@@ -159,10 +225,8 @@ function showCtrlResult(msg, ok) {
 const scannerInput = document.getElementById('scannerInput');
 const indicator    = document.getElementById('scannerIndicator');
 
-// Auto-fokus saat halaman dimuat
 scannerInput.focus();
 
-// Refokus jika user klik area lain (bukan tombol/link)
 document.addEventListener('click', e => {
   if (!e.target.closest('button') && !e.target.closest('a')) {
     scannerInput.focus();
@@ -173,19 +237,20 @@ function handleScannerKey(e) {
   if (e.key === 'Enter') {
     e.preventDefault();
     const token = scannerInput.value.trim();
-    if (token.length > 10) processToken(token);
     scannerInput.value = '';
+    if (token.length > 10 && !scannerBusy) processToken(token);
   }
 }
 
-// Deteksi otomatis entry vs exit berdasarkan status reservasi di server
 async function processToken(token) {
+  scannerBusy = true;
   indicator.innerHTML = '<i class="fas fa-circle blink" style="color:#F59E0B;"></i> Memvalidasi...';
 
-  // Coba entry dulu; jika sudah checked_in, alihkan ke exit
+  // Coba entry dulu; kalau sudah checked_in → otomatis coba exit
   const entryResult = await scanGate(token, 'entry');
 
-  if (!entryResult.success && entryResult.message && entryResult.message.includes('sudah tercatat masuk')) {
+  if (!entryResult.success && entryResult.message &&
+      entryResult.message.includes('sudah tercatat masuk')) {
     const exitResult = await scanGate(token, 'exit');
     showScanResult(exitResult.message, exitResult.success);
     if (exitResult.success) addHistory({ type: 'exit', ...exitResult });
@@ -197,10 +262,11 @@ async function processToken(token) {
   indicator.innerHTML = '<i class="fas fa-circle" style="color:#10B981;"></i> Siap scan berikutnya';
   setTimeout(() => {
     indicator.innerHTML = '<i class="fas fa-circle"></i> Menunggu scan';
-  }, 3000);
+    scannerBusy = false;
+  }, 2000);
 }
 
-// FIXED: gate_id sekarang pakai GATE_IDS sesuai gate_type, bukan 'WEB-SCANNER'
+// gate_id sesuai gate_type supaya ESP32 bisa ambil command lewat polling
 async function scanGate(token, gateType) {
   try {
     const res = await fetch('/gate/scan', {
@@ -226,7 +292,7 @@ function showScanResult(msg, ok) {
   setTimeout(() => el.style.display = 'none', 6000);
 }
 
-// ── Riwayat Aktivitas ─────────────────────────────────────────────
+// ── Riwayat ───────────────────────────────────────────────────────
 function addHistory(data) {
   scanHistory.unshift({
     type:     data.type,

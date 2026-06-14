@@ -275,6 +275,23 @@ def gate_open_manual():
     }
     return jsonify({'ok': True, 'gate': gate, 'gate_id': gate_id})
 
+# ── Tambahkan route ini di app.py setelah route /api/gate/open ──
+
+@app.route('/api/gate/close', methods=['POST'])
+def gate_close_manual():
+    data    = request.get_json(force=True, silent=True) or {}
+    gate_id = data.get('gate_id', 'ESP32-GATE')
+    gate    = data.get('gate',    'masuk')
+
+    gate_commands[gate_id] = {
+        'command': 'close',
+        'gate':    gate,
+        'slot':    '',
+        'vehicle': '',
+        'time':    now_wib().strftime('%H:%M:%S')
+    }
+    return jsonify({'ok': True, 'gate': gate, 'gate_id': gate_id})
+
 # ─────────────────────────────────────────
 #  POLLING ENDPOINT untuk ESP32
 # ─────────────────────────────────────────
