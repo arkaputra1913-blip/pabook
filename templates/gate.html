@@ -11,11 +11,7 @@
 
       <!-- Gate Masuk -->
       <div class="gate-ctrl-box entry-box">
-        <div class="gate-ctrl-icon entry-icon">
-          <i class="fas fa-sign-in-alt"></i>
-        </div>
         <div class="gate-ctrl-label">Gate Masuk</div>
-        <div class="gate-ctrl-status" id="statusMasuk">Memuat...</div>
         <div style="display:flex; gap:8px; margin-top:8px;">
           <button class="gate-ctrl-btn entry-btn" id="btnBukaMasuk" onclick="bukaGate('masuk')" style="flex:1;">
             <i class="fas fa-lock-open me-1"></i>Buka
@@ -35,11 +31,7 @@
 
       <!-- Gate Keluar -->
       <div class="gate-ctrl-box exit-box">
-        <div class="gate-ctrl-icon exit-icon">
-          <i class="fas fa-sign-out-alt"></i>
-        </div>
         <div class="gate-ctrl-label">Gate Keluar</div>
-        <div class="gate-ctrl-status" id="statusKeluar">Memuat...</div>
         <div style="display:flex; gap:8px; margin-top:8px;">
           <button class="gate-ctrl-btn exit-btn" id="btnBukaKeluar" onclick="bukaGate('keluar')" style="flex:1;">
             <i class="fas fa-lock-open me-1"></i>Buka
@@ -85,40 +77,7 @@ const GATE_IDS = {
   keluar: 'GATE-KELUAR-A'
 };
 
-async function refreshGateStatus() {
-  try {
-    const res  = await fetch('/api/gate/status');
-    const data = await res.json();
-    updateStatusUI('masuk',  data['GATE-MASUK-A']);
-    updateStatusUI('keluar', data['GATE-KELUAR-A']);
-  } catch {}
-}
-
-function updateStatusUI(gate, info) {
-  const statusEl = document.getElementById(gate === 'masuk' ? 'statusMasuk'   : 'statusKeluar');
-  const btnBuka  = document.getElementById(gate === 'masuk' ? 'btnBukaMasuk'  : 'btnBukaKeluar');
-  const btnTutup = document.getElementById(gate === 'masuk' ? 'btnTutupMasuk' : 'btnTutupKeluar');
-
-  if (!info) {
-    statusEl.textContent = 'Tidak diketahui';
-    statusEl.className   = 'gate-ctrl-status';
-    btnBuka.disabled = false; btnBuka.style.opacity = '1';
-    btnTutup.disabled = true; btnTutup.style.opacity = '0.45';
-    return;
-  }
-
-  const isOpen = info.state === 'open';
-  statusEl.textContent = isOpen ? '🟢 Terbuka' : '🔴 Tertutup';
-  statusEl.className   = `gate-ctrl-status ${isOpen ? 'open' : ''}`;
-
-  btnBuka.disabled      = isOpen;
-  btnBuka.style.opacity = isOpen ? '0.45' : '1';
-  btnTutup.disabled      = !isOpen;
-  btnTutup.style.opacity = isOpen ? '1' : '0.45';
-}
-
-refreshGateStatus();
-setInterval(refreshGateStatus, 2000);
+// ── Kontrol Manual Gate ──────────────────────────────────────────
 
 async function bukaGate(gate) {
   const btn = document.getElementById(gate === 'masuk' ? 'btnBukaMasuk' : 'btnBukaKeluar');
@@ -126,7 +85,7 @@ async function bukaGate(gate) {
   btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
   try {
     const res  = await fetch('/api/gate/open', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ gate_id: GATE_IDS[gate], gate })
     });
     const data = await res.json();
@@ -147,7 +106,7 @@ async function tutupGate(gate) {
   btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
   try {
     const res  = await fetch('/api/gate/close', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
+      method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ gate_id: GATE_IDS[gate], gate })
     });
     const data = await res.json();
@@ -166,9 +125,12 @@ function showCtrlResult(msg, ok) {
   setTimeout(() => el.style.display = 'none', 5000);
 }
 
+// ── USB Scanner Input ────────────────────────────────────────────
+
 const scannerInput = document.getElementById('scannerInput');
 const indicator    = document.getElementById('scannerIndicator');
 scannerInput.focus();
+
 document.addEventListener('click', e => {
   if (!e.target.closest('button') && !e.target.closest('a')) scannerInput.focus();
 });
@@ -182,31 +144,31 @@ function handleScannerKey(e) {
   }
 }
 
+// ── Proses Token QR ──────────────────────────────────────────────
+// Pakai /gate/scan/auto → server yang tentukan masuk atau keluar
+// berdasarkan status reservasi di database.
+
 async function processToken(token) {
   scannerBusy = true;
   indicator.innerHTML = '<i class="fas fa-circle blink" style="color:#FFB900;"></i> Memvalidasi...';
-  const entryResult = await scanGate(token, 'entry');
-  if (!entryResult.success && entryResult.message && entryResult.message.includes('sudah tercatat masuk')) {
-    const exitResult = await scanGate(token, 'exit');
-    showScanResult(exitResult.message, exitResult.success);
-  } else {
-    showScanResult(entryResult.message, entryResult.success);
+
+  try {
+    const res    = await fetch('/gate/scan/auto', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({ qr_token: token })
+    });
+    const result = await res.json();
+    showScanResult(result.message, result.success);
+  } catch {
+    showScanResult('Gagal terhubung ke server!', false);
   }
+
   indicator.innerHTML = '<i class="fas fa-circle" style="color:#7CB900;"></i> Siap scan berikutnya';
   setTimeout(() => {
     indicator.innerHTML = '<i class="fas fa-circle"></i> Menunggu scan';
     scannerBusy = false;
   }, 2000);
-}
-
-async function scanGate(token, gateType) {
-  try {
-    const res = await fetch('/gate/scan', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ qr_token: token, gate_type: gateType, gate_id: gateType === 'entry' ? GATE_IDS.masuk : GATE_IDS.keluar })
-    });
-    return await res.json();
-  } catch { return { success: false, message: 'Gagal terhubung ke server!' }; }
 }
 
 function showScanResult(msg, ok) {

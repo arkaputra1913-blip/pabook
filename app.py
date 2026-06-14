@@ -152,7 +152,6 @@ def mytiket():
 
 @app.route('/gate')
 def gate():
-    # Kirim ID gate ke template supaya tombol manual bisa pakai ID yang benar
     gate_ids = {
         'entry': 'GATE-MASUK-A',
         'exit':  'GATE-KELUAR-A'
@@ -172,11 +171,97 @@ def api_ping():
     })
 
 # ─────────────────────────────────────────
-#  SCAN QR (dari ESP32 / USB scanner / browser)
+#  SCAN QR — AUTO DETECT (dari browser / USB scanner di halaman gate)
+# ─────────────────────────────────────────
+
+@app.route('/gate/scan/auto', methods=['POST'])
+def gate_scan_auto():
+    """
+    Dipakai oleh browser (halaman gate scanner).
+    Server otomatis menentukan gate_type berdasarkan status reservasi,
+    sehingga browser tidak perlu menebak entry atau exit.
+    """
+    data     = request.get_json(force=True, silent=True) or {}
+    qr_token = data.get('qr_token', '').strip()
+
+    if not qr_token:
+        return jsonify({'success': False, 'message': 'Token QR tidak boleh kosong!'})
+
+    r = Reservation.query.filter_by(qr_token=qr_token).first()
+    if not r:
+        return jsonify({'success': False, 'message': 'QR Code tidak valid atau tidak ditemukan!'})
+
+    slot = ParkingSlot.query.filter_by(slot_code=r.slot_code).first()
+
+    # Auto-detect: status active/reserved → entry, checked_in → exit
+    if r.status in ('active', 'reserved'):
+        gate_type = 'entry'
+        gate_id   = 'GATE-MASUK-A'
+    elif r.status == 'checked_in':
+        gate_type = 'exit'
+        gate_id   = 'GATE-KELUAR-A'
+    else:
+        return jsonify({'success': False, 'message': 'Tiket sudah tidak aktif (kendaraan sudah keluar)!'})
+
+    if gate_type == 'entry':
+        r.status        = 'checked_in'
+        r.checked_in_at = now_wib()
+        if slot:
+            slot.status = 'occupied'
+        db.session.commit()
+
+        gate_commands[gate_id] = {
+            'command': 'open',
+            'gate':    'masuk',
+            'slot':    r.slot_code,
+            'vehicle': r.vehicle,
+            'time':    r.checked_in_at.strftime('%H:%M:%S')
+        }
+        return jsonify({
+            'success':   True,
+            'gate_type': 'entry',
+            'message':   f'Selamat datang! Slot {r.slot_code} aktif untuk {r.vehicle}.',
+            'slot':      r.slot_code,
+            'vehicle':   r.vehicle,
+        })
+
+    else:  # exit
+        r.status         = 'checked_out'
+        r.checked_out_at = now_wib()
+        if slot:
+            slot.status = 'available'
+        db.session.commit()
+
+        delta   = r.checked_out_at - r.checked_in_at
+        total_m = int(delta.total_seconds() / 60)
+        h, m    = divmod(total_m, 60)
+
+        gate_commands[gate_id] = {
+            'command': 'open',
+            'gate':    'keluar',
+            'slot':    r.slot_code,
+            'vehicle': r.vehicle,
+            'time':    r.checked_out_at.strftime('%H:%M:%S')
+        }
+        return jsonify({
+            'success':   True,
+            'gate_type': 'exit',
+            'message':   f'Sampai jumpa! {r.vehicle} keluar. Durasi: {h}j {m}m.',
+            'slot':      r.slot_code,
+            'vehicle':   r.vehicle,
+            'duration':  f'{h}j {m}m',
+        })
+
+# ─────────────────────────────────────────
+#  SCAN QR — MANUAL GATE TYPE (dari ESP32 langsung)
 # ─────────────────────────────────────────
 
 @app.route('/gate/scan', methods=['POST'])
 def gate_scan():
+    """
+    Dipakai oleh ESP32 yang sudah tahu gate_type-nya (entry/exit)
+    berdasarkan gate mana yang menerima scan fisik.
+    """
     data      = request.get_json(force=True, silent=True) or request.form
     qr_token  = data.get('qr_token',  '').strip()
     gate_type = data.get('gate_type', 'entry')
@@ -257,11 +342,6 @@ def gate_scan():
 
 @app.route('/api/gate/open', methods=['POST'])
 def gate_open_manual():
-    """
-    Body JSON:
-      { "gate_id": "GATE-MASUK-A", "gate": "masuk" }
-      { "gate_id": "GATE-KELUAR-A", "gate": "keluar" }
-    """
     data    = request.get_json(force=True, silent=True) or {}
     gate_id = data.get('gate_id', 'ESP32-GATE')
     gate    = data.get('gate',    'masuk')
@@ -274,8 +354,6 @@ def gate_open_manual():
         'time':    now_wib().strftime('%H:%M:%S')
     }
     return jsonify({'ok': True, 'gate': gate, 'gate_id': gate_id})
-
-# ── Tambahkan route ini di app.py setelah route /api/gate/open ──
 
 @app.route('/api/gate/close', methods=['POST'])
 def gate_close_manual():
@@ -298,11 +376,6 @@ def gate_close_manual():
 
 @app.route('/api/gate/poll', methods=['GET'])
 def gate_poll():
-    """
-    ESP32 polling tiap ~1.5 detik.
-    Query param: gate_id
-    Response: { has_command: true/false, command, gate, slot, vehicle, time }
-    """
     gate_id = request.args.get('gate_id', 'ESP32-GATE')
     cmd     = gate_commands.pop(gate_id, None)
     if cmd:
@@ -310,18 +383,13 @@ def gate_poll():
     return jsonify({'has_command': False})
 
 # ─────────────────────────────────────────
-#  STATUS GATE (opsional, untuk dashboard realtime)
+#  STATUS GATE
 # ─────────────────────────────────────────
 
-# Simpan status gate yang dilaporkan ESP32
 gate_status = {}
 
 @app.route('/api/gate/status', methods=['POST'])
 def gate_status_update():
-    """
-    ESP32 melaporkan status gate (open/closed) setelah aksi.
-    Body JSON: { "gate_id": "...", "state": "open" | "closed", "type": "entry" | "exit" }
-    """
     data    = request.get_json(force=True, silent=True) or {}
     gate_id = data.get('gate_id', '')
     if gate_id:
@@ -334,7 +402,6 @@ def gate_status_update():
 
 @app.route('/api/gate/status', methods=['GET'])
 def gate_status_get():
-    """Ambil status semua gate — untuk dashboard web realtime."""
     return jsonify(gate_status)
 
 # ─────────────────────────────────────────
