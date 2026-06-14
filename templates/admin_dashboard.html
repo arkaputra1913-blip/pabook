@@ -3,7 +3,6 @@
 
 {% block content %}
 <h1 class="page-title">Admin Dashboard</h1>
-<p class="page-subtitle">Monitor &amp; kelola sistem parkir Pabook secara real-time</p>
 
 <!-- Stats -->
 <div class="row g-3 mb-4">
@@ -115,9 +114,6 @@
       <h5 class="card-section-title mb-3">
         <i class="fas fa-redo me-2"></i>Reset Slot Manual
       </h5>
-      <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
-        Slot dengan status dipesan/terisi yang perlu direset secara manual:
-      </p>
       <div class="d-flex flex-wrap gap-2">
         {% for slot in slots if slot.status != 'available' %}
         <form action="{{ url_for('admin_reset_slot', slot_code=slot.slot_code) }}" method="POST">

@@ -4,7 +4,6 @@
 {% block content %}
 <div class="gate-container" style="max-width:600px;">
   <h1 class="page-title text-center">Kontrol Gate</h1>
-  <p class="page-subtitle text-center">Panel kendali palang parkir — masuk &amp; keluar</p>
 
   <!-- Kontrol Gate -->
   <div class="gate-card mb-4">
@@ -22,7 +21,7 @@
             <i class="fas fa-lock-open me-1"></i>Buka
           </button>
           <button class="gate-ctrl-btn" id="btnTutupMasuk" onclick="tutupGate('masuk')"
-                  style="flex:1; background:var(--danger,#ef4444); color:#fff; opacity:0.4;" disabled>
+                  style="flex:1; opacity:0.45;" disabled>
             <i class="fas fa-lock me-1"></i>Tutup
           </button>
         </div>
@@ -46,7 +45,7 @@
             <i class="fas fa-lock-open me-1"></i>Buka
           </button>
           <button class="gate-ctrl-btn" id="btnTutupKeluar" onclick="tutupGate('keluar')"
-                  style="flex:1; background:var(--danger,#ef4444); color:#fff; opacity:0.4;" disabled>
+                  style="flex:1; opacity:0.45;" disabled>
             <i class="fas fa-lock me-1"></i>Tutup
           </button>
         </div>
@@ -55,23 +54,14 @@
     </div>
 
     <div id="ctrlResult" class="scan-result mt-4" style="display:none;"></div>
-
-    <div class="gate-note mt-3">
-      <i class="fas fa-info-circle me-1"></i>
-      Status diperbarui otomatis tiap 2 detik dari ESP32. Palang menutup sendiri setelah kendaraan lewat atau timeout 8 detik.
-    </div>
   </div>
 
   <!-- Scan QR via USB Scanner -->
-  <div class="card p-4 mb-4">
+  <div class="card p-4">
     <h6 class="gate-section-title">
       <i class="fas fa-barcode me-2" style="color:var(--primary);"></i>Scanner USB / Keyboard
     </h6>
-    <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">
-      Hubungkan scanner barcode ke laptop. Arahkan kursor ke field di bawah, lalu scan QR tiket. Sistem otomatis menentukan masuk atau keluar.
-    </p>
-
-    <div class="scanner-input-wrap">
+    <div class="scanner-input-wrap mt-3">
       <input type="text" id="scannerInput" class="form-control scanner-input"
              placeholder="Fokus di sini, lalu scan QR Code..."
              autocomplete="off" autocorrect="off" spellcheck="false"
@@ -81,60 +71,39 @@
       </div>
     </div>
 
-    <div id="scanResult" class="scan-result mt-3" style="display:none;"></div>
-  </div>
-
-  <!-- Riwayat -->
-  <div class="card p-4">
-    <h6 class="gate-section-title">
-      <i class="fas fa-history me-2" style="color:var(--primary);"></i>Riwayat Aktivitas Gate
-    </h6>
-    <div id="scanHistory">
-      <div style="font-size:13px; color:var(--text-muted); text-align:center; padding:20px 0;">
-        Belum ada aktivitas sesi ini
-      </div>
-    </div>
+    <div id="scanResult" class="scan-result" style="display:none;"></div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-let scanHistory = [];
-let scannerBusy = false;  // Cegah double-scan saat sedang proses
+let scannerBusy = false;
 
-// ID gate harus sama persis dengan GATE_ENTRY_ID / GATE_EXIT_ID di ESP32
 const GATE_IDS = {
   masuk:  'GATE-MASUK-A',
   keluar: 'GATE-KELUAR-A'
 };
 
-// ── Status Realtime dari ESP32 ────────────────────────────────────
 async function refreshGateStatus() {
   try {
     const res  = await fetch('/api/gate/status');
     const data = await res.json();
-
     updateStatusUI('masuk',  data['GATE-MASUK-A']);
     updateStatusUI('keluar', data['GATE-KELUAR-A']);
-  } catch {
-    // Server tidak bisa dijangkau, biarkan status terakhir
-  }
+  } catch {}
 }
 
 function updateStatusUI(gate, info) {
-  const statusEl     = document.getElementById(gate === 'masuk' ? 'statusMasuk'     : 'statusKeluar');
-  const btnBuka      = document.getElementById(gate === 'masuk' ? 'btnBukaMasuk'    : 'btnBukaKeluar');
-  const btnTutup     = document.getElementById(gate === 'masuk' ? 'btnTutupMasuk'   : 'btnTutupKeluar');
+  const statusEl = document.getElementById(gate === 'masuk' ? 'statusMasuk'   : 'statusKeluar');
+  const btnBuka  = document.getElementById(gate === 'masuk' ? 'btnBukaMasuk'  : 'btnBukaKeluar');
+  const btnTutup = document.getElementById(gate === 'masuk' ? 'btnTutupMasuk' : 'btnTutupKeluar');
 
   if (!info) {
-    // Belum ada laporan dari ESP32
     statusEl.textContent = 'Tidak diketahui';
     statusEl.className   = 'gate-ctrl-status';
-    btnBuka.disabled     = false;
-    btnBuka.style.opacity = '1';
-    btnTutup.disabled    = true;
-    btnTutup.style.opacity = '0.4';
+    btnBuka.disabled = false; btnBuka.style.opacity = '1';
+    btnTutup.disabled = true; btnTutup.style.opacity = '0.45';
     return;
   }
 
@@ -142,95 +111,66 @@ function updateStatusUI(gate, info) {
   statusEl.textContent = isOpen ? '🟢 Terbuka' : '🔴 Tertutup';
   statusEl.className   = `gate-ctrl-status ${isOpen ? 'open' : ''}`;
 
-  // Tombol Buka hanya aktif kalau gate tertutup
   btnBuka.disabled      = isOpen;
-  btnBuka.style.opacity = isOpen ? '0.4' : '1';
-
-  // Tombol Tutup hanya aktif kalau gate terbuka
+  btnBuka.style.opacity = isOpen ? '0.45' : '1';
   btnTutup.disabled      = !isOpen;
-  btnTutup.style.opacity = isOpen ? '1' : '0.4';
+  btnTutup.style.opacity = isOpen ? '1' : '0.45';
 }
 
-// Polling status tiap 2 detik
 refreshGateStatus();
 setInterval(refreshGateStatus, 2000);
 
-// ── Kontrol Manual ────────────────────────────────────────────────
 async function bukaGate(gate) {
-  const btnBuka  = document.getElementById(gate === 'masuk' ? 'btnBukaMasuk'  : 'btnBukaKeluar');
-  btnBuka.disabled     = true;
-  btnBuka.style.opacity = '0.4';
-  btnBuka.innerHTML    = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
-
+  const btn = document.getElementById(gate === 'masuk' ? 'btnBukaMasuk' : 'btnBukaKeluar');
+  btn.disabled = true; btn.style.opacity = '0.45';
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
   try {
     const res  = await fetch('/api/gate/open', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ gate_id: GATE_IDS[gate], gate })
     });
     const data = await res.json();
-
-    if (data.ok) {
-      showCtrlResult(`Perintah buka <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim ke ESP32`, true);
-      addHistory({ type: gate === 'masuk' ? 'entry' : 'exit', slot: 'MANUAL', vehicle: 'Override Admin' });
-    } else {
-      showCtrlResult('Gagal mengirim perintah', false);
-      btnBuka.disabled = false;
-      btnBuka.style.opacity = '1';
-    }
+    showCtrlResult(data.ok
+      ? `Perintah buka <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim`
+      : 'Gagal mengirim perintah', data.ok);
+    if (!data.ok) { btn.disabled = false; btn.style.opacity = '1'; }
   } catch {
     showCtrlResult('Tidak bisa terhubung ke server', false);
-    btnBuka.disabled = false;
-    btnBuka.style.opacity = '1';
+    btn.disabled = false; btn.style.opacity = '1';
   }
-
-  btnBuka.innerHTML = '<i class="fas fa-lock-open me-1"></i>Buka';
+  btn.innerHTML = '<i class="fas fa-lock-open me-1"></i>Buka';
 }
 
 async function tutupGate(gate) {
-  const btnTutup = document.getElementById(gate === 'masuk' ? 'btnTutupMasuk' : 'btnTutupKeluar');
-  btnTutup.disabled      = true;
-  btnTutup.style.opacity = '0.4';
-  btnTutup.innerHTML     = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
-
+  const btn = document.getElementById(gate === 'masuk' ? 'btnTutupMasuk' : 'btnTutupKeluar');
+  btn.disabled = true; btn.style.opacity = '0.45';
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Mengirim...';
   try {
     const res  = await fetch('/api/gate/close', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ gate_id: GATE_IDS[gate], gate })
     });
     const data = await res.json();
-
-    if (data.ok) {
-      showCtrlResult(`Perintah tutup <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim ke ESP32`, true);
-    } else {
-      showCtrlResult('Gagal mengirim perintah tutup', false);
-    }
-  } catch {
-    showCtrlResult('Tidak bisa terhubung ke server', false);
-  }
-
-  btnTutup.innerHTML = '<i class="fas fa-lock me-1"></i>Tutup';
+    showCtrlResult(data.ok
+      ? `Perintah tutup <strong>${gate === 'masuk' ? 'Masuk' : 'Keluar'}</strong> dikirim`
+      : 'Gagal mengirim perintah tutup', data.ok);
+  } catch { showCtrlResult('Tidak bisa terhubung ke server', false); }
+  btn.innerHTML = '<i class="fas fa-lock me-1"></i>Tutup';
 }
 
 function showCtrlResult(msg, ok) {
   const el = document.getElementById('ctrlResult');
   el.style.display = 'block';
-  el.className     = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
-  el.innerHTML     = (ok ? '✅ ' : '❌ ') + msg;
+  el.className = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
+  el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
   setTimeout(() => el.style.display = 'none', 5000);
 }
 
-// ── USB Scanner Input ─────────────────────────────────────────────
 const scannerInput = document.getElementById('scannerInput');
 const indicator    = document.getElementById('scannerIndicator');
-
 scannerInput.focus();
-
 document.addEventListener('click', e => {
-  if (!e.target.closest('button') && !e.target.closest('a')) {
-    scannerInput.focus();
-  }
+  if (!e.target.closest('button') && !e.target.closest('a')) scannerInput.focus();
 });
 
 function handleScannerKey(e) {
@@ -244,85 +184,37 @@ function handleScannerKey(e) {
 
 async function processToken(token) {
   scannerBusy = true;
-  indicator.innerHTML = '<i class="fas fa-circle blink" style="color:#F59E0B;"></i> Memvalidasi...';
-
-  // Coba entry dulu; kalau sudah checked_in → otomatis coba exit
+  indicator.innerHTML = '<i class="fas fa-circle blink" style="color:#FFB900;"></i> Memvalidasi...';
   const entryResult = await scanGate(token, 'entry');
-
-  if (!entryResult.success && entryResult.message &&
-      entryResult.message.includes('sudah tercatat masuk')) {
+  if (!entryResult.success && entryResult.message && entryResult.message.includes('sudah tercatat masuk')) {
     const exitResult = await scanGate(token, 'exit');
     showScanResult(exitResult.message, exitResult.success);
-    if (exitResult.success) addHistory({ type: 'exit', ...exitResult });
   } else {
     showScanResult(entryResult.message, entryResult.success);
-    if (entryResult.success) addHistory({ type: 'entry', ...entryResult });
   }
-
-  indicator.innerHTML = '<i class="fas fa-circle" style="color:#10B981;"></i> Siap scan berikutnya';
+  indicator.innerHTML = '<i class="fas fa-circle" style="color:#7CB900;"></i> Siap scan berikutnya';
   setTimeout(() => {
     indicator.innerHTML = '<i class="fas fa-circle"></i> Menunggu scan';
     scannerBusy = false;
   }, 2000);
 }
 
-// gate_id sesuai gate_type supaya ESP32 bisa ambil command lewat polling
 async function scanGate(token, gateType) {
   try {
     const res = await fetch('/gate/scan', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        qr_token:  token,
-        gate_type: gateType,
-        gate_id:   gateType === 'entry' ? GATE_IDS.masuk : GATE_IDS.keluar
-      })
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ qr_token: token, gate_type: gateType, gate_id: gateType === 'entry' ? GATE_IDS.masuk : GATE_IDS.keluar })
     });
     return await res.json();
-  } catch {
-    return { success: false, message: 'Gagal terhubung ke server!' };
-  }
+  } catch { return { success: false, message: 'Gagal terhubung ke server!' }; }
 }
 
 function showScanResult(msg, ok) {
   const el = document.getElementById('scanResult');
   el.style.display = 'block';
-  el.className     = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
-  el.innerHTML     = (ok ? '✅ ' : '❌ ') + msg;
+  el.className = `scan-result ${ok ? 'scan-ok' : 'scan-err'}`;
+  el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
   setTimeout(() => el.style.display = 'none', 6000);
-}
-
-// ── Riwayat ───────────────────────────────────────────────────────
-function addHistory(data) {
-  scanHistory.unshift({
-    type:     data.type,
-    slot:     data.slot     || 'MANUAL',
-    vehicle:  data.vehicle  || 'Override Admin',
-    time:     data.time     || new Date().toLocaleTimeString('id-ID'),
-    duration: data.duration || null
-  });
-
-  const el = document.getElementById('scanHistory');
-  el.innerHTML = scanHistory.slice(0, 15).map(h => {
-    const isIn = h.type === 'entry';
-    return `
-      <div class="history-item ${isIn ? 'hi-in' : 'hi-out'}">
-        <div class="hi-dot ${isIn ? 'dot-in' : 'dot-out'}">
-          <i class="fas fa-sign-${isIn ? 'in' : 'out'}-alt"></i>
-        </div>
-        <div>
-          <div style="font-weight:700; font-size:13px;">
-            Slot ${h.slot}${h.vehicle && h.vehicle !== 'Override Admin' ? ' — ' + h.vehicle : ''}
-            ${h.vehicle === 'Override Admin'
-              ? '<span style="font-size:11px;color:var(--warning);margin-left:6px;">MANUAL</span>'
-              : ''}
-          </div>
-          <div style="font-size:11px; color:var(--text-muted);">
-            ${isIn ? 'Masuk' : 'Keluar'} · ${h.time}${h.duration ? ' · Durasi: ' + h.duration : ''}
-          </div>
-        </div>
-      </div>`;
-  }).join('');
 }
 </script>
 {% endblock %}
